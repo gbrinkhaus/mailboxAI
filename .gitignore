@@ -1,0 +1,14 @@
+/database.db
+/config.json
+
+helpers/prep_env.sh
+logo/*
+
+.DS_Store
+*/.DS_Store
+
+.mailbox-AI-db/
+appcache/
+__pycache__/
+
+**/preview.jpg

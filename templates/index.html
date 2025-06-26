@@ -1,0 +1,542 @@
+{% extends 'base.html' %}
+
+{% block title %}AI recognition for your paper mail{% endblock %}
+
+{% block scripts %}
+    <!-- Own JavaScripts -->
+    <script src="./static/pysorter-index.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<!-- INDEX.HTML -->
+
+<div id="header" class="row p-4 pb-0 pe-lg-0 pt-lg-5 align-items-center rounded-3 border shadow-lg hero">
+    <!-- HEADER WITH IMAGE -->
+    <div class="col-lg-7 p-3 p-lg-5 pt-lg-3">
+        <h1 class="display-4 fw-bold lh-1 text-body-emphasis">AI recognition for your paper documents</h1>
+
+        {% if appobj.localcfg['targetpath'] == "" or appobj.localcfg['dbpath'] == "" %}
+            <p class="lead">No target or database path selected. Please choose a target path on the <b><a href="{{ url_for('settings')}}">settings </b></a>page.</p>
+        {% else %}
+
+        <p class="lead">• First, scan your incoming mail with your <b>iPhone.</b></p>
+        <p class="lead">• Then, let mailbox.AI do automatic OCR and content recognition.</p>
+        <p class="lead">• With a few simple rules, let mailbox.AI learn your expectations.</p>
+        <br /><br />
+        <!--div class="row">
+            <div class="col-8 mb-1">
+                <form method="POST" action="" enctype="multipart/form-data">
+                    <p><input type="file" id="PDF file" name="PDF file" accept=".pdf" onchange="javascript:callOCR(this);">
+                    </p>
+                </form>
+            </div>
+        </div-->
+
+        <div class="col-4">
+            <div id="progress"></div>
+        </div>
+
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4 offset-lg-1 p-0 overflow-hidden shadow-lg">
+        <img class="rounded-lg-3  align-top" src="./static/images/bootstrap-docs.jpg" alt="" width="550">
+    </div>
+
+    <!-- FILE LIST -->
+    <div class="col-12" id="filepicker">
+        <h4>Please choose a file from input folder</h4>
+        <div class="row">
+
+            <!-- folder switching is not really needed for now>
+            <div class="col-6 mb-1">
+                <span class="btn fas fa-regular"></span>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary"
+                        onclick="javascript:changefolder(this.innerHTML, 'ner');"> .. </button>
+                </div>
+            </div-->
+            {% for infile in appobj.infiles %}
+                {% if infile['type'] == "DIR" %}
+                <!-- folder switching is not really needed for now>
+                <div class="col-6 mb-1">
+                    <span class="btn fas fa-regular"></span>
+
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-secondary"
+                            onclick="javascript:changefolder(this.innerHTML, 'ner');">{{ infile['name'] }} </button>
+                    </div>
+                </div-->
+                {% elif infile['type'] == "pdf"  %}
+                <div class="col-6 mb-1">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-ner-cat fas fa-light noHover"></button>
+                        <button type="button" class="btn btn-primary"
+                            onclick="javascript:callOCR(this.innerHTML);">{{ infile['name'] }} </button>
+                        <!--button type="button" class="btn btn-ner-delete">x</button-->
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <br /><br />
+    </div>
+</div>
+
+<br /><br />
+
+<div class="container">
+
+    <!-- Main content -->
+    <div class="row">
+
+        <!-- Major page columns: LEFT -->
+        <div class="col-7 ner-group">
+
+            <!-- Display of NER tags ******************** -->
+            <div class="row" id="ocrresults" hidden>
+                <h2>Please choose tags and file name</h2>
+                <div class="col-12">
+                    <h5>File: {{ appobj.currentfile }}</h5>
+                    <br /><br />
+                </div>
+
+                <div class="col-10">
+                    <h5>Entities found:</h5>
+                </div>
+                <div class="col-2 text-center">
+                    <button type="button" class="btn fas fa-regular btn-outline-secondary btn-add-action"
+                        onclick="javascript:openAddFolderWindow();">&#xf802;</button>
+                </div>
+
+                <div class="col-12" id="ner-tags">
+                    {% for ent in appobj.recognizedtags %}
+                    <div class="btn-group btn-group-sm ner-group " role="group">
+                        <button type="button" class="btn btn-ner-cat" 
+                            onclick="javascript:openNewTagWindow('{{ent['text']|e}}', '{{ent['label']|e}}');">{{ ent['label']|e }} </button>
+                        <button type="button" class="btn btn-primary"
+                            onclick="javascript:addTag('{{ent['text']|e}}', '{{ent['label']|e}}');">{{ ent['text']|e }} </button>
+                        <button type="button" class="btn fas fa-regular btn-ner-delete"
+                            onclick="javascript:stopTag(this);">&#xf2ed;</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="col-12" id="date-tags">
+                    <h5>Dates:</h5>
+                    {% for date in appobj.datetags %}
+                    <div class="btn-group btn-group-sm ner-group" role="group">
+                        <button type="button" class="btn btn-ner-cat" 
+                            onclick="javascript:writeFormField('DT', '{{date[1]|e}}');">{{ date[0]|e }} </button>
+                        <button type="button" class="btn btn-primary"
+                            onclick="javascript:writeFormField('DT', '{{date[1]|e}}');">{{ date[1]|e }} </button>
+                        <button type="button" class="btn fas fa-regular btn-ner-delete"
+                            onclick="javascript:removeTag(this);">x</button>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="row align-items-center">
+                    <div class="col-2">
+                        <br />
+                        <h5>PDF Text:</h5>
+                    </div>
+                    <!--div class="col-3">
+                        <br />
+                        <button type="button" class="btn  btn-outline-primary btn-sm"
+                            onclick="javascript:addTag(window.getSelection().toString(), 'txt');">Write text ></button>
+                    </div>
+                    <div class="col-7 pt-3 text-primary">
+                        Alt+1,2,..: Write level, Alt+Shift+1,2,..: Write hint
+                    </div-->
+                </div>
+
+                <p id="filecontents">{{ appobj.filecontents }}</p>
+
+            </div>
+        </div>
+
+        <!-- Major page columns: RIGHT -->
+        <div class="col-5" id="folderforms" hidden>
+            <div class="row justify-content-evenly align-items-start">
+
+                <div class="col-3">
+                </div>
+                <div class="col-6">
+                    <!-- Button trigger modal -->
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal"
+                        data-bs-target="#imageModal">
+                        <img src='/static/images/preview.jpg' class="img-fluid" />
+                    </button>
+                </div>
+                <div class="col-2">
+                </div>
+                <div class="col-1 justify-content-right">
+                    <button type="button" class="btn-close" role="button" data-bs-toggle="button" onclick='javascript:resetApp();' aria-label="Close"></button>
+                </div>
+
+                <br /><br />
+            </div>
+            <br />
+
+            <!-- Right side input form ******************* -->
+            <form method="POST" action="processfile" enctype="multipart/form-data">
+
+                <!-- Display LEVEL forms ************************** -->
+
+                <!-- Input for filename + date-->
+                <div class="row">
+                    <div class="col-10">
+                        <h5>Filename + Path</h5>
+                    </div>
+                    <div class="col-12 levelform fs-6 fw-regular text-primary-emphasis mb-2 mt-1">
+                        <div id="FilePath" name="FilePath">Please select filename, date and 3 tags!</div>
+                    </div>
+                    <div class="col-12 levelform">
+                        <div class="input-group">
+                            <div class="input-group-text">
+                                <input type="radio" name="levelswitcher" id="FN-Textswitcher">
+                            </div>
+                            <input id="FN" name="FN" type="text" class="form-control levelinput" placeholder="Filename" value ="" 
+                                onchange="javascript:checkSendButton();" onkeyup="javascript:checkSendButton();"  {% if not appobj.copyFile %} readonly="readonly" {% endif %} >
+                        </div>
+                    </div>
+                    <div class="col-12 levelform">
+                        <div class="input-group">
+                            <div class="input-group-text">
+                                <input type="radio" name="levelswitcher" id="DT-Textswitcher">
+                            </div>
+                            <input id="DT" name="DT" type="text" class="form-control levelinput" placeholder="Date" value ="{{ appobj.dateonly }}" 
+                                onchange="javascript:checkSendButton();" onkeyup="javascript:checkSendButton();"
+                                {% if not appobj.copyFile %} disabled {% endif %} >
+                            <button type="button" class="btn btn-outline-secondary" active
+                                onclick="javascript:setTodaysDate('DT');" {% if not appobj.copyFile %} readonly="readonly" {% endif %} >
+                                Today</button>
+                        </div>
+                    </div>
+                </div>
+
+                <br />
+
+
+                <!-- Display the TAGs (new version) ******************* -->
+                {% for nerEnt in appobj.nerEnts %}
+                    <div class="row">
+                        <div class="col-12 levelform">
+                            <div class="card">
+                                <div class="input-group-text">
+                                    <h6>{{nerEnt[1]}} </h6>
+                                    <!--input type="radio" name="levelswitcher" id="MISC-Groupswitcher"-->
+                                </div>
+                                <div class="card-body ner-group" id="{{nerEnt[0]}}-Cards" name="{{nerEnt[0]}}-Cards">
+                                    {% for ent in appobj.confirmedtags %}
+                                        {% if ent['label'] == nerEnt[0] %}
+                                        <div class="btn-group btn-group-sm ner-group confirmed-ners" role="group">
+                                            <button type="button" class="btn btn-tagpath {{ent['active']}}" role="button" 
+                                                onclick="javascript:changePathOrder(this, true);">{{ent['pathlevel']}}</button>
+                                            <button type="button" class="btn btn-primary {{ent['active']}}" role="button"  id="{{ent['label']|replace(' ', '') + ent['text']|replace(' ', '')}}"
+                                                ondblclick='javascript:openNewTagWindow("{{ent['text']|e}}", "{{ent['label']|e}}", "{{ent['text']|e}}");'
+                                                onclick='javascript:changePathOrder(this, false);'>{{ ent['text']|e }} </button>
+                                            <button type="button" class="btn fas fa-regular btn-ner-delete"
+                                                onclick="javascript:removeTag(this);">x</button>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+
+                                </div>
+                                <input type="text" hidden id="{{nerEnt[1]}}-Hints" name="{{nerEnt[1]}}-Hints">
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+
+                <!-- Display the ACTIONS form ******************* -->
+                <div class="row justify-content-left">
+                    <div class="col-10">
+                        {% for action in appobj.storedtags if action['label'] == 'ACTION' %}
+                        <div class="btn-group btn-group-sm ner-group confirmed-ners" role="group">
+                            <button type="button" class="btn btn-secondary {{action['active']}}" role="button"  id="{{action['label']|replace(' ', '') + action['text']|replace(' ', '')}}"
+                                ondblclick='javascript:openActionWindow("{{action['text']}}", "{{action['texthints']}}");'
+                                onclick='javascript:addAction("{{action['text']}}", "{{action['texthints']}}");'>{{ action['text']|e }} </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-2 text-end">
+                        <button type="button" class="btn fas fa-regular btn-outline-secondary btn-add-action"
+                            onclick="javascript:openActionWindow();">+</button>
+                    </div>
+
+                    <div class="col-12 levelform">
+                        <div class="card">
+                            <div class="input-group-text">
+                                <h6>Actions</h6>
+                                <!--input type="radio" name="levelswitcher" id="MISC-Groupswitcher"-->
+                            </div>
+                            <div class="card-body ner-group" id="ACTION-Cards" name="">
+                                {% for ent in appobj.confirmedtags if ent['label'] == 'ACTION' %}
+                                {#{ ent }#}
+                                <div class="btn-group btn-group-sm ner-group confirmed-ners" role="group">
+                                    <button type="button" class="btn btn-primary" role="button"  id="{{ent['label']|replace(' ', '') + ent['text']|replace(' ', '')}}"
+                                        onclick="window.open('https://{{ent["texthints"]}}','_blank')" target="_blank">{{ ent['text']|e }} </button>
+                                    <button type="button" class="btn fas fa-regular btn-ner-delete"
+                                        onclick="javascript:removeAction(this);">x</button>
+                                </div>
+                                {% endfor %}
+
+                            </div>
+                            <input type="text" hidden id="actions" name="actions">
+                        </div>
+                    </div>
+
+                    <input hidden type="text" id="Hiddenpath" name="Hiddenpath">
+                    <input hidden type="text" id="Tag-Hints" name="Tag-Hints">
+                    <div hidden id="Validfolders">{{appobj.subfolderstring|safe}}</div>
+                </div>
+
+                <div class="row justify-content-end">
+                    <div class="col-2 align-self-center">
+                        <button type="button" class="btn btn-primary" id="fileSendButton" disabled
+                            onclick="javascript:processFile(this);" type="submit">Send</button>
+                        <br /><br />
+                    </div>
+                </div>
+
+                </div>
+            </form>
+
+            <!-- input type="button" id="mybutton" value="Click Here for mybutton" />
+            <input type="button" id="mybutton" value="Click Here for testbutton" onclick="javascript:testButton('test')"/>
+            <input type="button" id="mybutton" value="Click Here for sendData" onclick="javascript:sendData(this)"/ -->
+
+        </div>
+
+        <!-- ROW -->
+    </div>
+
+    <div hidden id="Storedtags">{{ appobj.storedtags|tojson }}</div>
+
+</div>
+
+
+<!-- Modals *********************************************************************************************************** -->
+
+<!-- IMAGE Modal -->
+<div class="modal imageModal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="imageModalLabel">Preview</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <img src='/static/images/preview.jpg' class="img-fluid" />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- EDIT TAG Modal -->
+<div class="modal fade" id="tagModal" tabindex="-1" aria-labelledby="tagModalLabel" aria-hidden="true">
+    <div class="modal-dialog" id="tagModalDialog">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="tagModalLabel">Enter new term</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-12 levelform">
+                        <div class="input-group ner-group">
+                            <button type="button" class="btn btn-ner-cat" id="target-type" 
+                                onclick="javascript:setNextEnt(this);">MISC</button>
+                            <input type="text" value="Target term"
+                                class="form-control levelinput" placeholder="Target term"
+                                name="" id="target-term"
+                                onchange="javascript:checkDuplicateTags();" >
+                            <button type="button"
+                                class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                                data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="visually-hidden">Toggle Dropdown</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" id="">
+                                <li><a class="dropdown-item"
+                                        onclick="">List tbd</a></li>
+                                <!--li><hr class="dropdown-divider"></li-->
+                            </ul>
+                        </div>
+
+                        <br/>
+                        <h6 class="" id="">Spawned by</h6>
+
+                        <div class="card">
+                            <div class="card-body ner-group" name="" id="">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-ner-cat " id="newhinttype">TXT</button>
+                                    <button type="button" class="btn btn-outline-primary"
+                                        onclick="" id="newhinttext">Dummy data </button>
+                                </div>
+                            </div>
+                            <input type="text" hidden name="" id="">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer d-block">
+                <div class="row justify-content-between">
+                    <div class="col-4">
+                        <button type="button" class="btn btn-primary" onclick="javascript:setFilename();" data-bs-dismiss="modal">As filename</button>
+                    </div>
+                    <div class="col-5 text-end">
+                        
+                        <!-- Learning: Inputs have a "value" property and a "value" attribute - only 1 of those changes on manual change (!) -->
+                        <button type="button" class="btn btn-primary" 
+                            onclick='javascript:addTag($("#target-term").prop("value"), $("#target-type").html(), $("#target-term").attr("value"));writeTag($("#target-term").prop("value"), $("#target-type").html(), $("#target-term").attr("value"));' 
+                            data-bs-dismiss="modal">Add tag</button>
+                        
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <div hidden class="container" id="error-container">
+                <div id="error-text" class="alert danger alert-danger pt-0 pb-0" role="alert">Tag already exists with other label!</div>
+            </div>
+            <div hidden class="container" id="notice-container">
+                <div id="notice-text" class="alert success alert-success pt-0 pb-0" role="alert">Existing tag will be updated.</div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+<!-- EDIT ACTION Modal -->
+<div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog" id="actionModal">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="actionModalLabel">Enter new action</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-12 levelform">
+                        <div class="input-group ner-group">
+                            <input type="text" value=""
+                                class="form-control levelinput" placeholder="Action name"
+                                name="" id="actionTerm"
+                                onchange="" onkeyup="">
+                        </div>
+                    </div>
+                    
+                    <br/><br/>
+
+                    <div class="col-12 levelform">
+                        <div class="input-group ner-group">
+                            <input type="text" value=""
+                                class="form-control levelinput" placeholder="Action link (optional)"
+                                name="newAction" id="newAction"
+                                onchange="" onkeyup="">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer d-block">
+                <div class="row justify-content-between">
+                    <div class="col-4">
+                    </div>
+                    <div class="col-6 text-end">
+                        
+                        <!-- Learning: Inputs have a "value" property and a "value" attribute - only 1 of those changes on manual change (!) -->
+                        <button type="button" class="btn btn-primary" 
+                            onclick='javascript:addNewAction($("#actionTerm").prop("value"), $("#newAction").prop("value"));' 
+                            data-bs-dismiss="modal">Add action</button>
+                        
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+            </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ADD FOLDER Modal -->
+<div class="modal fade" id="addFolderModal" tabindex="-1" aria-labelledby="addFolderModalLabel" aria-hidden="true">
+    <div class="modal-dialog" id="addFolderModal">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="addFolderModalLabel">Select storage folders</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-12 levelform">
+                        {% for i in range(1,4) %}
+                        {% set disabled = '' if i == 1 else 'disabled' %}
+                        {% set placeholder = 'Folder 1' if i == 1 else '' %}
+                        <div class="input-group mt-2">
+                            <button type="button btn btn-outline-secondary" disabled class="btn btn-ner-cat" id="FModalNr{{i}}" 
+                                onclick="">{{i}}</button>
+
+                            <input id="FModalText{{i}}" disabled type="text" class="form-control levelinput" placeholder="{{placeholder}}" value="">
+
+                            {# <div class="card onecard" id="foldercard{{i}}"> #}
+
+                            <button type="button" id="FModalDropdwn{{i}}" {{disabled}}
+                                class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                                data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="visually-hidden">Toggle Dropdown</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" id="FModalList{{i}}" >
+
+                                {% for folder in appobj.subfolders[i-1] %}
+                                <li parentfolder="{{folder['parent']}}">
+                                    <a class="dropdown-item"   
+                                        onclick="javascript:selectFolder('{{folder['tag']['text']}}', '{{folder['tag']['label']}}', '{{folder['tag']['texthints']}}', '{{i}}')"> {{folder['subdir']}} </a>
+                                </li>
+                                <!--li><hr class="dropdown-divider"></li-->
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer d-block">
+                <div class="row justify-content-between">
+                    <div class="col-4">
+                    </div>
+                    <div class="col-6 text-end">
+                        
+                        <!-- Learning: Inputs have a "value" property and a "value" attribute - only 1 of those changes on manual change (!) -->
+                        <button type="button" class="btn btn-primary" 
+                            onclick='javascript:addFolder($("#actionTerm").prop("value"), $("#newAction").prop("value"));' 
+                            data-bs-dismiss="modal">Select</button>
+                        
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+
+                {# {{ appobj.subfolders }} #}
+
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+{% endblock %}

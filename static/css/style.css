@@ -1,0 +1,393 @@
+h1 {
+    border: 0px #eee solid;
+    padding: 0px;
+    margin-bottom:3rem;
+}
+
+/* to always show scroll bar */
+body    
+{
+  overflow-y:scroll;
+}
+
+.noHover{
+  pointer-events: none;
+}
+
+.navbar {
+  margin-bottom:3rem;
+}
+
+.navbar img {
+  width: 4rem;
+  margin-left: 1rem;
+}
+
+.navbar .alert {
+  margin-right: 1rem;
+}
+
+.navbar-brand {
+  margin-left: 2rem;
+}
+
+.nav-link {
+  color: #898989;
+}
+
+.nav-tabs .nav-link.active {
+  color: #334c72;
+}
+
+.tab-content {
+  padding: 1.5rem;
+}
+
+.tab-content .card  {
+  background-color: #f9fcff;
+}
+
+.tab-content h6.card-title  {
+  padding-left: .3rem;
+  padding-top: .1rem;
+  padding-bottom: .1rem;
+  margin-bottom: .2rem;
+  border-bottom: 1px solid #dee2e6;
+  background-color: #96aec8;
+  color: #ffffff;
+  font-size: .9rem;
+}
+
+.tab-content .card-body  {
+  padding-left: .7rem;
+  padding-top: .1rem;
+  padding-bottom: .3rem;
+  font-size: .9rem;
+  min-height: 4.5rem;
+}
+
+.tab-content .card .ner-group button {
+  padding: .1rem .3rem .1rem .3rem;
+  margin-bottom: 0rem;
+  font-size: .8rem;
+}
+
+.tab-content .card-body span {
+  font-size: .9rem;
+}
+
+.tab-content .card-footer  {
+  padding-left: .1rem;
+  padding-top: .1rem;
+  padding-bottom: .1rem;
+  font-size: .8rem;
+}
+
+.tab-content .card-footer button {
+  margin-left: .3rem;
+  margin-top: .1rem;
+  margin-bottom: .1rem;
+  font-size: .8rem;
+  padding: 0.2rem;
+}
+
+.tab-content .card-footer button.fas {
+  margin-top: .1rem;
+  font-size: 1rem;
+}
+
+.tab-content .card-footer p {
+  margin-left: .3rem;
+  margin-top: .3rem;
+  margin-bottom: 0rem;
+  font-size: .8rem;
+}
+
+#progress {
+  min-height: 3rem;;
+}
+
+/* Documents search + list results **************************************/
+
+h5 a
+{
+text-decoration: none;
+}
+
+.row#documents
+{
+  background-color: #f7faff;
+
+  border-radius: .5rem;
+  outline-color: rgb(135, 183, 255);
+  outline-width: .5px;
+  outline-style: solid;
+}
+
+.row#documents .btn-close
+{
+  font-size: .7rem;
+  margin-top: 0.6rem;
+}
+
+#doc-result-list .btn-group
+{
+  padding: 0rem 0.2rem 0rem 0.2rem;
+  margin-bottom: 0.5rem;
+  margin-left: 0.2rem;
+}
+
+#doc-result-list .tagtoggle
+{
+  align-self: baseline;
+}
+
+#doc-result-list .btn-tag-delete
+{
+  border: 0;
+  align-self: baseline;
+  font-size: .8rem; 
+  background-color: #9ba7b9;
+  color: #fff;
+  padding: 0.2rem 0.4rem 0.2rem 0.4rem;
+}
+
+#doc-result-list h1
+{
+  font-size: 1.8rem; 
+  font-weight: 700;
+  padding: 0.2rem 0.4rem 0.2rem 0.4rem;
+}
+
+.accordion-button.collapsed
+{
+  background-color: #f2f2f2;
+}
+
+#doc-result-list .folderlevels h5
+{
+  font-size: 1.2rem; 
+  font-weight: 600;
+  color: #969696;
+}
+
+#doc-result-list .btn-tag-delete:hover {
+  background-color: #dadfe8;
+  color: #000000;
+}
+
+#documents .input-group-text.btn-group-sm {
+  padding: 0rem 0rem 0rem 0rem;
+}
+
+.openfolder {
+  font: Fontawesome;
+}
+
+#fileModal .modal-dialog {
+  max-width: 900px;
+}
+
+#actionFilterModal .modal-dialog {
+  max-width: 700px;
+}
+
+.small .accordion-button {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  /* font-size: ; */
+} 
+
+/* Ner-group to show NER results ***************************************/
+
+.ner-group .btn-group {
+  margin-right: 1rem;
+}
+
+.ner-group .btn, #target-term {
+  margin-bottom: .4rem;
+}
+
+.ner-group .btn-tagpath
+{
+  background-color: #6a88b4;
+  color: #d7d7d7d3;
+  font-weight: bold;
+}
+
+.ner-group .btn-tagpath.active
+{
+  background-color: #2b80ff;
+  color: #ffffffd3;
+  border-color: #2a69c7;
+  font-weight: bold;
+}
+
+.ner-group .btn-ner-delete
+{
+  border-color: #2a69c7;
+  background-color: #2a69c7;
+  color: #c8d9f3d3;
+}
+
+.btn-ner-cat
+{
+  background-color: #15468f;
+  color: #a3bee7d3;
+  min-width: 2.5rem;
+}
+
+.btn-ner-cat:hover
+{
+  background-color: #5280c4;
+  color: #ffffffd3;
+}
+
+.ner-group .active
+{
+  background-color: #204e8d;
+  color: #ffffffef;
+}
+
+.badge {
+  margin-right: .2rem;
+}
+
+.badge.outline {
+  background-color: #fff;
+  color: #0d6efd;
+
+  outline-color: rgb(13, 110, 253);
+  outline-width: .5px;
+  outline-style: solid;
+}
+
+/* Level forms to input folder and filename */
+
+.levelinput {
+  font-weight: 600;
+}
+.levelinput::placeholder {
+  font-weight: 300;
+}
+
+.levelswitch {
+  display: inline-flex;
+}
+.levelswitch label {
+  margin-right: .2rem;
+}
+
+.levelform .input-group-text {
+  max-width: fit-content;
+  /* min-width: 6rem; */
+  padding: .375rem .75rem .1rem .75rem;
+}
+
+#documents .levelform .clear-button, 
+#documents .levelform .btn-delete,
+.acco-toggle-all
+  {
+  color: #aeaeae;
+  border-color: #aeaeae;
+}
+
+#documents .levelform .clear-button {
+  height:2rem;
+}
+
+.levelform .card {
+  margin-top:.2rem;
+  margin-bottom:2rem;
+}
+
+.levelform .card.onecard {
+  margin: 0;
+  padding-left: .5rem;
+  padding-top: .3rem;
+  --bs-card-spacer-y: 0rem; 
+  --bs-card-spacer-x: 0rem;
+  width: 80%;
+}
+
+#addFolderModal {
+  --bs-modal-width: 550px;
+}
+
+/* Tagform and tagtoggle - used for tag-buttons */
+
+.tagform .input-group {
+  margin-bottom: 0.5rem;
+}
+
+.tagform .btn-secondary {
+  border-radius: 0 15% 15% 0!important;
+}
+
+.tagform .btn-outline-secondary {
+  font-size: .75rem;
+  margin-bottom: 0.5rem;
+  margin-top: -0.2rem;
+}
+
+.btn.tagtoggle {
+  font-size: .8rem;
+  background-color: #9ba7b9;
+  color: #fff;
+  outline-color: #eee;
+  padding: 0.2rem 0.4rem 0.2rem 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.btn.tagtoggle.active{
+  background-color: rgb(13, 110, 253);
+  color: #ffffff;
+}
+
+/* Image popup */
+
+.imageModal .modal-dialog {
+  width: 90%;
+  max-width: 90%;
+}
+
+.imageModal .modal-header {
+  background-color: #fff;
+}
+
+.imageModal .modal-content {
+  background-color: #eee;
+}
+
+.imageModal .modal-body {
+  align-self: center;
+}
+
+/* animated "Please wait" text */
+
+#progress { 
+text-transform: uppercase;
+  background-image: linear-gradient(
+    225deg,
+    #231557 0%,
+    #2433b3 29%,
+    #ff90b5 67%,
+    #fffcb0 100%
+  );
+  background-size: auto auto;
+  background-clip: border-box;
+  background-size: 200% auto;
+  color: #fff;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textclip 2s linear infinite;
+  display: inline-block;
+      font-size: 1rem;
+}
+
+@keyframes textclip {
+  to {
+    background-position: 200% center;
+  }
+}

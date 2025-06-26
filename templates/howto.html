@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block title %}OCR + AI recognition for your documents{% endblock %}
+
+{% block content %}
+
+<div class="row p-4 pb-0 pe-lg-0 pt-lg-5 align-items-center rounded-3 border shadow-lg hero mb-5">
+    <div class="col-lg-7 p-3 p-lg-5 pt-lg-3">
+        <h1 class="display-4 fw-bold lh-1 text-body-emphasis">How to use mailbox.AI</h1>
+
+        <h3 class="mb-4">3 simple steps:</h3>
+        <h5><li><a href="#scan" class="link-secondary">Scan your incoming mail, e.g. with your <b>iPhone</b></a><br/></li></h5>
+        <h5><li><a href="#upload" class="link-secondary">Upload your files and let mailbox.AI do OCR and content recognition</a><br/></li></h5>
+        <h5><li><a href="#rules" class="link-secondary">Use simple rules to have mailbox.AI remember your choices</a></li></h5><br/>
+        <h5><li><a href="#rules" class="link-secondary">Hotkeys</a></li></h5>
+        <h5><li><a href="#rules" class="link-secondary">Tipps</a></li></h5>
+        <br /><br />
+
+    </div>
+
+    <div class="col-lg-4 offset-lg-1 p-0 overflow-hidden shadow-lg">
+        <img class="rounded-lg-3" src="./static/images/logo-512.jpg" alt="" width="512">
+    </div>
+</div>
+<br /><br />
+
+<!-- INDEX.HTML -->
+<div class="container">
+
+    <!-- Main content -->
+    <div class="row mb-5" id="scan">
+        <div class="col-3">
+            <img class="rounded-md-3 img-fluid" src="./static/images/Scanning.png" alt="">
+        </div>
+        <div class="col-7 offset-1 lead">
+            <h4 class="mb-3">Did you know that your iPhone has a scan function?</h4>
+            <p>Use it to save scans of your documents to the "download" folder. You can use the <b>iCloud</b> "download" folder to have the files available on your Mac immediately.</p>
+        </div>
+    </div>
+
+    <div class="row mb-5" id="upload">
+        <div class="col-7 offset-1 lead">
+            <h4>Upload your files</h4>
+            <p>Start mailbox.AI ony your Mac and upload your files from iCloud. The app will do an automatic OCR on each file and investigate its contents. </p>
+        </div>
+        <div class="col-3">
+            <img class="rounded-md-3 img-fluid" src="./static/images/OCR.png" alt="">
+        </div>
+    </div>
+
+    <div class="row mb-5" id="rules">
+        <div class="col-3">
+            <img class="rounded-md-3 img-fluid" src="./static/images/Tags.png" alt="">
+        </div>
+        <div class="col-7 offset-1 lead">
+            <h4>Select the contents to be remembered</h4>
+            <p>For each tag and level, you can assign one or more indicators that will automatically create the right tags the next time you upload a similar document.</p>
+        </div>
+    </div>
+
+    <div class="row mb-5" id="upload">
+        <div class="col-7 offset-1 lead">
+            <h4>Browse your files</h4>
+            <p>mailbox.AI will remember the contents and tags for your files. Use tags to track activites, follow up on documents etc.</p>
+        </div>
+        <div class="col-3">
+            <img class="rounded-md-3 img-fluid" src="./static/images/Documents.png" alt="">
+        </div>
+    </div>
+
+    <div class="row mb-5" id="rules">
+        <div class="col-3">
+            <img class="rounded-md-3 img-fluid" src="./static/images/Searching.png" alt="">
+        </div>
+        <div class="col-7 offset-1 lead">
+            <h4>Friendly format, no dependencies</h4>
+            <p>All files are stored as PDFs in a classic folder structure, along with a simple .txt file with all the tags and text contents.</p>
+        </div>
+    </div>
+
+</div>
+
+
+<!-- Modal -->
+<div class="modal imageModal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="imageModalLabel">Preview</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <img src='/static/images/preview.jpg' class="img-fluid" />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}

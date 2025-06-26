@@ -1,0 +1,105 @@
+Installation:
+
+- Fully delete local source folder
+- install brew
+
+- install python 3.12.0 with pyenv, not pip
+- Use py3.12.0 for spacy not to freeze
+
+- pip install pycryptodome
+- install waitress separately
+- install tesseract, add to path
+- install pytesseract
+
+- install poppler separately
+		brew install poppler
+
+- Make sure to have right languages installed:
+	brew install tesseract-lang
+
+In VSCode, use:
+	- SQLite3 Editor
+
+
+Open:
+
+- Umlautbug beim processfile?
+- Komplette Erzeugung der Tags
+- Fehlende Dateien sehen können
+
+- Statistik in Tags schreiben
+- Klasse für Tags und Files
+
+- Tags + Datum bei Aufnahme sauber einrichten
+
+- Besser Folder anbieten
+
+- Bewertungsboost reinbringen
+
+- Directory tree nicht mehr grün
+
+- Wenn Datei umgezogen, gleiche Datei suchen und aus Files löschen (?)
+
+- Reload button on HP
+
+- Clear add action on open
+
+- Why are old action tags active?
+
+- Bessere Datumserkennung: Englisch, ausgeschrieben
+- Datum im Eingabefeld verbessern
+
+- Löschbutton bei Ents schützen
+
+
+- Ents zufügen können in Formular
+
+- Tags umsortieren nach Häufigkeit
+
+- Save docs to zip (backup)
+
+Done:
+
+- Better way to guess folders
+- Tagcheck in Settings verschieben
+- Tags checken mit ungültige entfernen
+- Wenn directory tree, falsche Nummern vergeben
+- Wenn filter open all
+- Datenbank backupen
+- Arrays alignen
+
+
+
+
+
+>>> 
+import xattr
+import plistlib
+
+>>> atr = xattr.getxattr('./testfile', 'com.apple.metadata:_kMDItemUserTags')
+>>> print(atr)
+b'bplist00\xa1\x01VBanken\x08\n\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11'
+
+>>> pl = plistlib.loads(atr)
+>>> print(pl)
+['Banken']
+
+>>> pl = plistlib.dumps(['Test'])
+>>> print(pl)
+b'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<array>\n\t<string>Test</string>\n</array>\n</plist>\n'
+
+>>> xattr.setxattr('./testfile', 'com.apple.metadata:_kMDItemUserTags', pl)
+>>> atr = xattr.getxattr('./testfile', 'com.apple.metadata:_kMDItemUserTags')
+
+>>> print(atr)
+b'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<array>\n\t<string>Test</string>\n</array>\n</plist>\n'
+
+print(plistlib.loads(xattr.getxattr('./testfile', 'com.apple.metadata:_kMDItemTestTags')))
+
+attr= xattr.xattr('./testfile')
+for i in attr:
+	print(i)
+	print(plistlib.loads(xattr.getxattr('./testfile', i)))
+	
+
+print(plistlib.loads(xattr.getxattr('./testfile', 'com.apple.metadata:kMDItemFinderComment')))

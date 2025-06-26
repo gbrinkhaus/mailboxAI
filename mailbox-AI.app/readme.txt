@@ -1,0 +1,4 @@
+- This folder contains the start script, preventing duplicate instances
+- It can be used as an alias in the launchpad. 
+- Drag an alias into your applications folder and the app will show up
+- If you want to change the name, the name of folder and shell script must be the same

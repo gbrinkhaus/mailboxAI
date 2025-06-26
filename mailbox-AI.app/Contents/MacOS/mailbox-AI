@@ -1,0 +1,12 @@
+#!/bin/sh
+
+cd ~/Sources/mailbox.AI-prod
+
+if pgrep -f waitress > /dev/null
+then
+    echo "App already running!"
+else
+	waitress-serve --host 127.0.0.1 app:app
+fi
+
+exit

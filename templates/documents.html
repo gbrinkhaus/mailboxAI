@@ -1,0 +1,350 @@
+{% extends 'base.html' %}
+
+{% block scripts %}
+<!-- Own JavaScripts -->
+<script src="./static/pysorter-documents.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<h1>{% block title %}Documents{% endblock %}</h1>
+<br />
+
+<!-- DOCUMENTS.HTML -->
+<div class="container mb-5">
+
+    <!-- Selection header -->
+    <form method="POST" action="documents" enctype="multipart/form-data">
+        <div class="row" id="documents">
+                <div class="col-11 mt-2 ml-2 mb-3">
+                    <h3>Filters</h3>
+                </div>
+                <div class="col-1 justify-content-end d-inline-flex levelform  mt-2 ml-2 mb-3">
+                    <button type="button" class="btn btn-sm btn-outline-secondary clear-button" onclick="javascript:clearFilters();"
+                        aria-label="Close">X</button>
+                </div>
+
+            <!-- Selection header -->
+            <div class="col-6 levelform folderfields">
+                <div class="row justify-content-left">
+
+                    <div class="col-3">
+                        <div class="btn-group btn-group ner-group confirmed-ners mb-3" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-secondary btn-add-action"
+                                onclick="javascript:opentagFilterModal();">Entities</button>
+                            <button type="button" class="btn btn-sm btn-secondary btn-add-action"
+                                onclick="javascript:opentagFilterModal();">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Display the TAGs (new version) ******************* -->
+                    <div class="row">
+                        <div class="col-12 levelform">
+                            <div class="card">
+                                <div class="card-body ner-group" id="Entity-Cards" name="Entity-Cards">
+                                    {#{ appobj.filter }#}
+                                    {% for type in appobj.nerEnts %}
+                                        {% if appobj.filter[type[0]] %}
+                                            {% for ent in appobj.filter[type[0]] %}
+                                            <div class="btn-group btn-group-sm tag-group" role="group">
+                                                <button type="button" class="btn btn-ner-cat noHover">{{ type[0] }} </button>
+                                                <button type="button" class="btn btn-primary noHover">{{ ent }} </button>
+                                                <button type="button" class="btn fas fa-regular btn-ner-delete"
+                                                    onclick="javascript:removeFilter('{{type[0]}}', '{{ent}}');">x</button>
+                                            </div>
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-6 levelform fileandtags">
+               <!-- Display the ACTIONS form ******************* -->
+                <div class="row justify-content-left">
+
+                    <div class="col-3">
+                        <div class="btn-group btn-group ner-group confirmed-ners mb-3" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-secondary btn-add-action"
+                                onclick="javascript:openactionFilterModal();">Actions</button>
+                            <button type="button" class="btn btn-sm btn-secondary btn-add-action"
+                                onclick="javascript:openactionFilterModal();">+</button>
+                        </div>
+                    </div>
+
+                    <div class="col-12 levelform">
+                        <div class="card">
+                            <div class="card-body ner-group" id="Action-Cards" name="Action-Cards">
+                                {% for ent in appobj.filter['ACTION'] %}
+                                {#{ ent }#}
+                                <div class="btn-group btn-group-sm ner-group confirmed-ners" role="group">
+                                    <button type="button" class="btn btn-primary" role="button"  id="{{'ACTION'+ent|replace(' ', '')}}"
+                                        >{{ ent }} </button>
+                                    <button type="button" class="btn fas fa-regular btn-ner-delete"
+                                        onclick="javascript:removeFilter('ACTION', '{{ent}}');">x</button>
+                                </div>
+                                {% endfor %}
+
+                            </div>
+                            <input type="text" hidden id="actions" name="actions">
+                        </div>
+                    </div>
+
+                    <h6>Attributes + Tags</h6>
+                    <!-- Input for filename + date-->
+                        <div class="col-7 levelform mb-3">
+                            <div class="input-group">
+                                <input type="text" value="{{ appobj.filter['FILE'] }}" class="form-control levelinput"
+                                    placeholder="Filename" id="FN" name="FN"
+                                    onchange="javascript:addFilter('FILE', this.value);">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary btn-delete"
+                                        onclick="javascript:removeFilter('FILE', '');">x</button>
+                            </div>
+                        </div>
+                        <div class="col-5 levelform mb-3">
+                            <div class="input-group">
+                                <input type="text" value="{{ appobj.filter['DATE'] }}" class="form-control levelinput"
+                                    placeholder="Date" id="DT" name="DT"
+                                    onchange="javascript:addFilter('DATE', this.value);">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary btn-delete"
+                                    onclick="javascript:removeFilter('DATE', '');">x</button>
+                                </div>
+                        </div>
+                </div>
+            </div>
+            <input hidden type="text" id="Filter-Hints" name="Filter-Hints" value="{{appobj.filterstring}}">
+        </div>
+        </form>
+
+    <br/>
+    <div class="col-4">
+        <div id="progress"></div>
+    </div>
+
+    <!-- File list ************************************************************************************ -->
+    <div class="row" id="doc-result-list">
+
+        <div class="col-11 text-start">
+            {% if appobj.files|length == 0 %}
+                No results found!
+            {% endif %}
+        </div>
+        <div class="col-1 text-center mb-2">
+            <button type="button" class="btn fas fa-light btn-sm btn-outline-secondary acco-toggle-all">&#xf103;</button>
+        </div>
+        
+        {# loop to write out the html elements #}
+        <div class="accordion" id="doclist" aria-multiselectable="true">
+            {% for path in appobj.allpaths if path['level'] == 0 %}
+            {% set idx = loop.index0 %}
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button"
+                        data-bs-toggle="collapse" href="#collapse{{idx}}"
+                        aria-expanded="{% if i==0 %}true{% else %}false{% endif %}" aria-controls="collapse{{idx}}">
+                        {{ path['subpath'] }}
+                    </button>
+                </h2>
+
+                <!-- to prevent different collapses from reacting to each other, omit the parent -->
+                <!--div id="collapse{{i}}" class="accordion-collapse collapse {% if i==0 %}show{% endif %}" data-bs-parent="#doclist"-->
+                <div id="collapse{{idx}}" class="accordion-collapse collapse"  role="tabpanel" >
+                        <div class="accordion-body">
+
+                        <!-- Nav tabs -->
+                        <ul class="nav nav-tabs" id="navTab{{idx}}" role="tablist">
+                            {% for path2 in appobj.allpaths if path2['parent'] == "/" + path['id']|string %}
+                                {% set j = loop.index0 %}
+                                {% set id = i|string + j|string %}
+
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link {% if j==0 %}active{% endif %}" id="tab-{{idx}}{{id}}"
+                                        data-bs-toggle="tab" data-bs-target="#content{{idx}}{{id}}" type="button" role="tab"
+                                        aria-controls="home" aria-selected="true">
+                                        {{ path2['subpath'] }}
+                                    </button>
+                                </li>
+                            {% endfor %}
+                        </ul>
+
+                        <!-- Tab panes - WARNING do not remove the tab-content div -->
+                        <div class="tab-content">
+                            {% for path2 in appobj.allpaths if path2['parent'] == "/" + path['id']|string %}
+                                {% set j = loop.index0 %}
+                                {% set id = i|string + j|string %}
+                                <div class="tab-pane fade {% if j==0 %}active show{% endif %}" id="content{{idx}}{{id}}" role="tabpanel"
+                                    aria-labelledby="home-tab" tabindex="0">
+
+                                    <div class="row row-cols-3 row-cols-md-4 g-4">
+                                        {% set ns = namespace(p3="") %}
+                                        {% for file in appobj.files if file['splitpath'][0] == path['subpath'] and file['splitpath'][1] == path2['subpath'] %}
+                                            {% if ns.p3 != file['splitpath'][2] %}
+                                                <!--h6>{{ file['splitpath'][2] }}</h6-->
+                                            {% endif %}
+
+                                            <div class="col">
+                                                <div class="card">
+                                                    <h6 class="card-title">
+                                                        <span class="btn fas fa-light"></span>
+                                                        {{ file['splitpath'][2] }}
+                                                    </h6>
+                                                    <div class="card-body">
+                                                        <div class="row justify-content-start">
+                                                            <div class="col-md-12 mb-1">
+                                                                <span class="card-text">{{ file['name'] }}</span>                                                        
+                                                            </div>
+                                                            <div class="col-md-12">
+                                                                {#{file}#}
+                                                                {% for ent in file['tagarray'] if ent['label'] == "ACTION" %}
+                                                                {% set disabled = '' if ent["texthints"] else 'disabled' %}
+                                                                <div class="btn-group btn-group-sm ner-group" role="group">
+                                                                    <button type="button" class="btn btn-primary" {{disabled}}
+                                                                        onclick="window.open('https://{{ent["texthints"]}}','_blank')" target="_blank">{{ ent['text']|e }} </button>
+                                                                    <button type="button" class="btn btn-ner-delete"
+                                                                        onclick="javascript:deleteTag({{ file['db_id']}}, 'ACTION', '{{ent['text']}}', this);">x</button>
+                                                                </div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+
+                                                    </div>
+                                                    <div class="card-footer">
+                                                        <div class="row justify-content-start">
+                                                            <div class="col-md-10">
+                                                                {% if file['db_id'] != -1 %}
+                                                                    <button type="button" class="btn btn-outline-secondary"
+                                                                    onclick="javascript:openDocModal( '{{ file['path'] + '/' + file['name'] }}' );">
+                                                                    {{ file['tagarray'] | rejectattr("label", "equalto", "ACTION") | list | count }} Tags</button>
+                                                                {% else %}
+                                                                    <button type="button" class="btn btn-outline-secondary fas fa-regular" 
+                                                                    data-toggle="tooltip" data-placement="top" title="This file is not in the database. Click to add it."
+                                                                    onclick="javascript:addFileToDB( {{ file }} );">&#xf071;</button>
+                                                                {% endif %}
+                                                                
+                                                            
+                                                            </div>
+                                                            <div class="col-md-2 text-end">
+                                                                <button type="button"
+                                                                    onclick="javascript:openLocation( '{{ file['path'] }}' + '/' + '{{ file['name'] }}', true );"
+                                                                    class="btn fas fa-regular {% if file.exists != true %} text-secondary {% else %} text-info {% endif %}">
+                                                                     </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>                                                                
+                                            </div>
+
+                                            {% if ns.p3 != file['splitpath'][2] %}
+                                            {% endif %}
+                                            {% set ns.p3 = file['splitpath'][2] %}
+
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <br /><br /><br />
+        {# % for file in appobj.files % #}
+        {#{ file['name'] }#}<br />
+        {#{ file['splitpath'] }#}<br />
+        {#% endfor % ##}
+
+    </div>
+</div>
+
+
+<!-- Modals ****************************************************************************************************************************** -->
+
+<!-- Doc property modal ****************************************** -->
+<div class="modal fileModal fade" id="fileModal" tabindex="-1" aria-labelledby="fileModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="fileModalLabel">Document properties</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="fileModalContents">
+                <!--object data='placeholder' id="modal-pic" class='img-fluid'></object-->
+ 
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Tag filter modal ****************************************** -->
+<div class="modal tagFilterModal fade" id="tagFilterModal" tabindex="-1" aria-labelledby="tagFilterModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="tagFilterModalLabel">Select tag</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                {% for type in appobj.nerEnts %}
+                    <p>
+                    {% for ent in appobj.storedtags if ent['label'] == type[0] and ent['text'] != "" and ent['texthints'] != "!!--STOP--!!" %}
+                        {% if loop.first %}<h6>{{type[0]}}</h6>{% endif %}
+
+                        {#{ appobj.storedtags }#}
+                        <div class="btn-group btn-group-sm ner-group" role="group">
+                            <button type="button" class="btn btn-ner-cat" 
+                                onclick='javascript:addFilter("{{ent["label"]}}", "{{ent["text"]}}", "Entity");'>{{ ent['label'] }} </button>
+                            <button type="button" class="btn btn-primary"
+                                onclick='javascript:addFilter("{{ent["label"]}}", "{{ent["text"]}}", "Entity");'>{{ ent['text'] }} </button>
+                        </div>
+                    {% endfor %}
+                    </p>
+                {% endfor %}
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action filter modal ****************************************** -->
+<div class="modal actionFilterModal fade" id="actionFilterModal" tabindex="-1" aria-labelledby="actionFilterModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="actionFilterModalLabel">Select action</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+
+                {% for ent in appobj.storedtags if ent['label'] == "ACTION" and ent['text'] != "" %}
+                {#{ appobj.storedtags }#}
+                <div class="btn-group btn-group-sm ner-group" role="group">
+                    <button type="button" class="btn btn-primary"
+                        onclick='javascript:addFilter("{{ent["label"]}}", "{{ent["text"]}}", "Action");'>{{ ent['text'] }} </button>
+                </div>
+                {% endfor %}
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
