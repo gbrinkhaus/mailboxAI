@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cd ~/Sources/mailbox.AI-prod
+cd ~/Sources/mailboxAI-prod
 
 if pgrep -f waitress > /dev/null
 then
