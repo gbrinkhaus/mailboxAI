@@ -126,10 +126,11 @@ def getLocalFiles(path, relpath, withsubfolders):
 
 # config file funcs *********************************************************************
 def load_config(datapath):
-    if not os.path.isfile(datapath + "/config.json"):
-        shutil.copy("./templates/config.json", datapath + "/config.json")
+    configfile = datapath + "/config.json"
+    if not os.path.isfile(configfile):
+        shutil.copy("./templates/config.json", configfile)
 
-    with open("./config.json") as json_data_file:
+    with open(configfile) as json_data_file:
         data = json.load(json_data_file)
     
     # standard presets
