@@ -6,8 +6,6 @@ class dbhandler:
     def __init__(self):
         self.dbFile = ""
 
-        pass
-
     # db funcs ******************************************************************************
     # make sure db exists and store it here
     def check_db(self, path):

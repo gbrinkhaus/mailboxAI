@@ -197,7 +197,7 @@
                             <div class="input-group-text">
                                 <input type="radio" name="levelswitcher" id="FN-Textswitcher">
                             </div>
-                            <input id="FN" name="FN" type="text" class="form-control levelinput" placeholder="Filename" value ="" 
+                            <input id="FN" name="FN" type="text" class="form-control levelinput" placeholder="Filename" value ="{{ appobj.currentfile.rsplit('.', 1)[0] }}" 
                                 onchange="javascript:checkSendButton();" onkeyup="javascript:checkSendButton();"  {% if not appobj.copyFile %} readonly="readonly" {% endif %} >
                         </div>
                     </div>
