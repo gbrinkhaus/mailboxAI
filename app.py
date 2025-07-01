@@ -62,7 +62,7 @@ def index():
     # when POST, execute OCR on a chosen file ************************
     else:
         resetApp(app)
-        callstr = request.get_json()['filename'].strip()
+        callstr = request.get_json()['filename']
 
         if callstr != '':
             app.fullfilename = callstr
@@ -93,9 +93,9 @@ def index():
             # sPrint(localpaths, subfolders, app.subfolders)
 
             # copy file to workdir - this is always done, even if not copied again later
-            app.currentfile = app.fullfilename
-            shutil.copyfile(app.fullpathplusname, app.workdir + app.fullfilename)
-            filename = app.workdir + app.fullfilename
+            app.currentfile = app.fullfilename.strip()
+            shutil.copyfile(app.fullpathplusname, app.workdir + app.currentfile)
+            filename = app.workdir + app.currentfile
 
             # extract the pdf contents
             AICore.write_PDFpreview(filename, app.prevfile)
