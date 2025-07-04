@@ -190,9 +190,9 @@ function writeTag(text, type, hint, reload) {
     if (typeof hint == 'undefined')
         hint = text;
 
-    succfunc = function(response) { ; };
+    successfunc = function(response) { ; };
     if(reload)
-        succfunc = function(response) { location.reload(); };
+        successfunc = function(response) { location.reload(); };
 
     // this is a little hack, to prevent errors when somebody should actually add a tag with my internal delimiter
     if(hint != "ACTION")
@@ -206,7 +206,7 @@ function writeTag(text, type, hint, reload) {
         type: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({ 'text': text, 'type': type, 'hint': hint }),
-        success: succfunc, 
+        success: successfunc, 
         error: function (error) {
             console.log(error);
         }
@@ -216,20 +216,22 @@ function writeTag(text, type, hint, reload) {
 
 // To write a tag into the db *************************************
 function closeApp() {
-
-    //window.location = "/";
-    //location.reload();
-
-    // to finish the app
+    // Send shutdown request to backend
     $.ajax({
         url: '/closeApp',
         type: 'POST',
         contentType: 'application/json',
-        success: function(response) { }, 
-        error: function (error)     { console.log(error); }
+        success: function(response) {},
+        error: function(error) { console.log(error); }
     });
-    //document.location.href="/";
-    setTimeout(function() {location.reload(); window.open("", "_blank", ""); window.close();}, 1000);
+    // Try to close the window after a short delay
+    setTimeout(function() {
+        window.close();
+        // If window is not closed, show a message
+        if (!window.closed) {
+            alert("Please close this browser tab or window manually. (Browser security blocks auto-close)");
+        }
+    }, 1000);
 };
 
 /* To send Flask get request, not needed right now *************************************

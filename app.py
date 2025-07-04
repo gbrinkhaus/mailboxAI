@@ -263,6 +263,9 @@ def processfile():
                         conn.commit()
                         conn.close()
 
+            # After all tags are associated, update the 'tags' field in 'files' table using reusable method
+            app.dbhandler.update_file_tags_field(app, fileid)
+
         flash('File ' + app.fullfilename + ' written!', "success")
         resetApp(app)
 

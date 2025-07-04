@@ -65,6 +65,15 @@ class dbhandler:
         return resultarray
 
 
+    def update_file_tags_field(self, app, fileid):
+        conn = self.get_db_connection()
+        tag_rows = conn.execute('SELECT tag_id FROM files_to_tags WHERE file_id = ?', (fileid,)).fetchall()
+        tag_ids = [row['tag_id'] for row in tag_rows]
+        tag_objs = [app.getTagByID(tid)[0] for tid in tag_ids if app.getTagByID(tid)]
+        conn.execute('UPDATE files SET tags = ? WHERE id = ?', (json.dumps(tag_objs), fileid))
+        conn.commit()
+        conn.close()
+
 
     # unified get db contents function
     def get_db_content(self, type, query=''):
