@@ -1,5 +1,7 @@
 Installation:
 
+- Denkfehler: db im local pfad
+
 - Fully delete local source folder
 - install brew
 
@@ -71,6 +73,7 @@ Done:
 
 
 
+Should I try xattr?
 
 >>> 
 import xattr
