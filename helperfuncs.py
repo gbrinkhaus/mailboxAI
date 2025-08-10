@@ -144,8 +144,6 @@ def load_config(datapath):
     else:
         data['sourcepath'] = cleanPath(data['sourcepath'])
 
-    data['dbpath'] = datapath + "/.mailbox-AI-db"
-
     if not 'levelstructure' in data:
         data['levelstructure'] = [  { 'id': 0, 'short': 'L1', 'descr': 'Level 1 - Main folder' },
                                     { 'id': 1, 'short': 'L2', 'descr': 'Level 2 - 2nd topic' },
@@ -186,8 +184,7 @@ def initApp(app):
     app.maxlevels = 3
     app.dbhandler = dbhandler.dbhandler()
 
-    if not app.dbhandler.init_db(app.localcfg['dbpath']):
-        app.dbhandler.create_db(app.localcfg['dbpath'])
+    if not app.dbhandler.establish_db(app.localcfg['targetpath']):
         app.initMessages += "Database not found. New, empty database was created."
 
     app.isInitialized = isInitialized(app)
@@ -216,7 +213,7 @@ def initApp(app):
 
 # check whether app can be used
 def isInitialized(app):
-    return app.dbhandler.check_db(app.localcfg['dbpath']) and app.localcfg['sourcepath'] != "" and app.localcfg['targetpath'] != ""
+    return app.dbhandler.check_db(app.localcfg['targetpath']) and app.localcfg['sourcepath'] != "" and app.localcfg['targetpath'] != ""
 
 
 # reset app values

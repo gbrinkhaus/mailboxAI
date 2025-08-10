@@ -16,15 +16,15 @@
             <div class="col-8">
                     <input class="form-control" type="text" value="{{ appobj.localcfg['sourcepath'] }}"
                     onkeyup="javascript:checkPathInput()" onchange="javascript:checkPathInput()" placeholder="Please enter a path" name="sourcedir"
-                    id="dbdir" />
+                    id="dbdir" readonly />
             </div>
             <!-- old, but nice: disabled db location field display>
             <div class="col-2">
                     <input class="form-control" disabled type="text" value="database.db" />
             </div-->
             <div class="col-1">
-                <button type="button" class="btn fas fa-regular"
-                    onclick="javascript:openLocation( '{{ appobj.localcfg['sourcepath'] }}', true );"></button>
+                <button type="button" class="btn fas fa-regular text-secondary"
+                    onclick="openFolderPicker('dbdir')"></button>
             </div>
         </div>
 
@@ -33,11 +33,11 @@
             <div class="col-8">
                 <input class="form-control" type="text" value="{{ appobj.localcfg['targetpath'] }}"
                     onkeyup="javascript:checkPathInput()" onchange="javascript:checkPathInput()" placeholder="Please enter a path" name="targetdir"
-                    id="targetdir" />
+                    id="targetdir" readonly />
             </div>
             <div class="col-1">
-                <button type="button" class="btn fas fa-regular"
-                    onclick="javascript:openLocation( '{{ appobj.localcfg['targetpath'] }}', true );"></button>
+                <button type="button" class="btn fas fa-regular text-secondary"
+                    onclick="openFolderPicker('targetdir')"></button>
             </div>
         </div>
 
@@ -181,5 +181,33 @@
     </div>
 </div>
 
+<!-- Folder Picker Modal -->
+<div class="modal fade" id="folderPickerModal" tabindex="-1" aria-labelledby="folderPickerLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="folderPickerLabel">Choose a folder</h5>
+        <div class="ms-auto">
+          <!-- iCloud Drive shortcut; visibility controlled by JS -->
+          <button type="button" id="fp-icloud-btn" class="btn btn-sm btn-outline-secondary d-none" title="Open iCloud Drive">
+            <span class="fas fa-cloud me-1" aria-hidden="true"></span> iCloud Drive
+          </button>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="border rounded p-2" style="max-height: 50vh; overflow:auto" id="fp-tree"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="fp-select-btn">Select this folder</button>
+      </div>
+    </div>
+  </div>
+</div>
 
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='folderPicker.js') }}"></script>
 {% endblock %}

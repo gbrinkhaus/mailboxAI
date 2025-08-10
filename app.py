@@ -14,7 +14,7 @@ from datetime import datetime
 from subprocess import call as callOS, Popen
 # from numpy import matrix as Matrix
 
-from flask import Flask, render_template, request, url_for, flash, redirect
+from flask import Flask, render_template, request, url_for, flash, redirect, jsonify
 
 import spacy
 import de_core_news_md
@@ -635,7 +635,9 @@ def settings():
             if not os.path.exists(newtarget):
                 success = False
             else:
-                app.localcfg['targetpath'] = newtarget
+                if app.dbhandler.establish_db(app.localcfg['targetpath'], newtarget):
+                    app.localcfg['targetpath'] = newtarget                
+                    success = True
 
         if sourcechanged:
             if not os.path.exists(newsource):
@@ -655,11 +657,125 @@ def settings():
         else:
             if not os.path.exists(newtarget): flash('Invalid target path: ' + newtarget, "danger")
             if not os.path.exists(newsource): flash('Invalid source path: ' + newsource, "danger")
-            if not os.path.exists(newdb): 
-                flash('Missing database file: ' + newFile + ' - <a href="">create new</a> ', "danger")
+            if not os.path.exists(app.dbhandler.get_db_file(newtarget)): 
+                flash('No success copying database file to: ' + app.dbhandler.get_db_file(newtarget), "danger")
+            else:
+                flash('Database file already present at: ' + app.dbhandler.get_db_path(newtarget), "danger")
             if not (targetchanged or movechanged or sourcechanged): flash('No changes detected - config not written', "danger")
 
     return render_template('settings.html', appobj=app)
+
+
+# FS listing API for folder picker **************************************************************
+@app.route('/api/fs/list', methods=['GET'])
+def api_fs_list():
+    """List subdirectories of a given path for the folder picker.
+
+    Query params:
+      - path (optional): absolute or ~-expanded path. Defaults to user home.
+      - include_hidden (optional): if truthy (1,true,yes), do NOT filter hidden/system entries
+
+    Returns JSON:
+      { "path": str, "entries": [ {"name": str, "path": str, "hasChildren": bool} ] }
+    """
+    req_path = request.args.get('path', '').strip()
+    include_hidden = str(request.args.get('include_hidden', '')).lower() in { '1', 'true', 'yes' }
+    base = Path(req_path).expanduser() if req_path else Path.home()
+    try:
+        p = base.resolve(strict=False)
+        if not p.exists():
+            return jsonify({"error": "Path not found", "path": str(p)}), 404
+        if not p.is_dir():
+            return jsonify({"error": "Not a directory", "path": str(p)}), 400
+
+        # Resolve platform UF_HIDDEN flag safely without adding a top-level import
+        try:
+            import stat as _stat
+            UF_HIDDEN = getattr(_stat, 'UF_HIDDEN', 0)
+        except Exception:
+            UF_HIDDEN = 0
+
+        # macOS Finder-like filtering helpers
+        HIDE_AT_ROOT = {
+            'System', 'Library', 'usr', 'bin', 'sbin', 'etc', 'var', 'tmp', 'dev', 'Volumes',
+            'cores', 'private', 'opt', 'net'
+        }
+
+        def load_hidden_file_set(parent: Path):
+            hidden_set = set()
+            try:
+                hf = parent / '.hidden'
+                if hf.exists() and hf.is_file():
+                    for line in hf.read_text(errors='ignore').splitlines():
+                        name = line.strip()
+                        if name:
+                            hidden_set.add(name)
+            except Exception:
+                pass
+            return hidden_set
+
+        parent_hidden = load_hidden_file_set(p)
+        is_root = p == p.anchor or str(p) == '/'
+
+        def is_hidden_dir(path_obj: Path) -> bool:
+            if include_hidden:
+                return False
+            name = path_obj.name
+            # dot-prefixed
+            if name.startswith('.'):
+                return True
+            # UF_HIDDEN flag (macOS/BSD)
+            try:
+                if UF_HIDDEN:
+                    st = os.stat(path_obj, follow_symlinks=False)
+                    if getattr(st, 'st_flags', 0) & UF_HIDDEN:
+                        return True
+            except Exception:
+                # If stat fails, do not hide based on flag
+                pass
+            # .hidden file listing
+            if name in parent_hidden:
+                return True
+            # Common system folders at filesystem root
+            if is_root and name in HIDE_AT_ROOT:
+                return True
+            return False
+
+        entries = []
+        try:
+            children = sorted(p.iterdir(), key=lambda c: c.name.lower())
+        except PermissionError:
+            children = []
+        for child in children:
+            # Only directories and not hidden (unless include_hidden)
+            if not child.is_dir():
+                continue
+            if is_hidden_dir(child):
+                continue
+            # Determine if it has visible subdirectories (respecting filter)
+            has_children = False
+            try:
+                for grand in child.iterdir():
+                    if grand.is_dir() and not is_hidden_dir(grand):
+                        has_children = True
+                        break
+            except PermissionError:
+                has_children = False
+            entries.append({
+                "name": child.name,
+                "path": str(child),
+                "hasChildren": has_children,
+            })
+        # Final sort by name case-insensitively
+        entries.sort(key=lambda e: e['name'].lower())
+        return jsonify({"path": str(p), "entries": entries}), 200
+    except Exception as exc:
+        # Log and return safe error
+        try:
+            app.logger.exception("/api/fs/list failed for %s: %s", req_path, exc)
+        except Exception:
+            pass
+        return jsonify({"error": "Internal Server Error"}), 500
 
 
 # Finish ************************************************

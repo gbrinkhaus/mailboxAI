@@ -16,8 +16,8 @@
     <div class="col-lg-7 p-3 p-lg-5 pt-lg-3">
         <h1 class="display-4 fw-bold lh-1 text-body-emphasis">AI recognition for your paper documents</h1>
 
-        {% if appobj.localcfg['targetpath'] == "" or appobj.localcfg['dbpath'] == "" %}
-            <p class="lead">No target or database path selected. Please choose a target path on the <b><a href="{{ url_for('settings')}}">settings </b></a>page.</p>
+        {% if appobj.localcfg['targetpath'] == "" %}
+            <p class="lead">No target path selected. Please choose a target path on the <b><a href="{{ url_for('settings')}}">settings </b></a>page.</p>
         {% else %}
 
         <p class="lead">• First, scan your incoming mail with your <b>iPhone.</b></p>
@@ -47,6 +47,9 @@
     <!-- FILE LIST -->
     <div class="col-12" id="filepicker">
         <h4>Please choose a file from input folder</h4>
+        {% if appobj.localcfg['sourcepath'] %}
+            <div class="mb-3 mt-0"><small class="text-muted">Current input folder: {{ appobj.localcfg['sourcepath'] }}</small></div>
+        {% endif %}
         <div class="row">
 
             <!-- folder switching is not really needed for now>

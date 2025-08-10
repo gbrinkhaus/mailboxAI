@@ -227,9 +227,9 @@ function closeApp() {
     // Try to close the window after a short delay
     setTimeout(function() {
         window.close();
-        // If window is not closed, show a message
+        // If window is not closed, just reload, don't show a message
         if (!window.closed) {
-            alert("Please close this browser tab or window manually. (Browser security blocks auto-close)");
+            location.reload();
         }
     }, 1000);
 };

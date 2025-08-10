@@ -6,35 +6,77 @@ class dbhandler:
     def __init__(self):
         self.dbFile = ""
 
-    # db funcs ******************************************************************************
-    # make sure db exists and store it here
-    def check_db(self, path):
-        return os.path.isfile(path + '/database.db')
+    # db file + path funcs ******************************************************************************
+    def get_db_file(self, newpath=None):
+        dbfile = '/database.db'
+        if newpath:
+            return self.get_db_path(newpath) + dbfile
+        else:
+            return self.dbFile
 
-    # make sure db exists and store it here
-    def init_db(self, path):
+    # get or create db path
+    def get_db_path(self, newpath=None):
+        dbfolder = "/.mailbox-AI-db"
+        if newpath:
+            return newpath + dbfolder
+        else:
+            return self.dbFile[:self.dbFile.rindex('/')]
+
+    # make sure db exists
+    def check_db(self, path):
+        return os.path.isfile(self.get_db_file(path))
+
+    # create or copy db to new location - 2x2 cases: 
+    def establish_db(self, orglpath, targetpath=None):
         success = False
-        self.dbFile = path + '/database.db'
-        if self.check_db(path):
-            success = True
-            shutil.copy(self.dbFile, self.dbFile + ".bak")
+
+        # 1. db to be created at new targetpath
+        if targetpath:
+            if not self.check_db(targetpath):
+                # 2. db does exist at source, but not at target, then move it to target
+                if self.check_db(orglpath):
+                    success = self.copyOrMove_db(orglpath, targetpath, "move")
+                # 2. no db at source or target, copy template to target folder
+                else:
+                    success = self.copyOrMove_db("./templates", targetpath, "copy")
+
+        # 2. db to be kept at original location
+        else:
+            # 2. db does exist, then copy it to backup
+            if self.check_db(orglpath):
+                self.dbFile = self.get_db_file(orglpath)
+                shutil.copy(self.dbFile, self.dbFile + ".bak")
+                success = True
+            # 2. db doesn't exist at source, copy template to source folder
+            else:
+                success = self.copyOrMove_db("./templates", orglpath, "copy")
 
         return success
 
-    # create new db file
-    def create_db(self, newpath):
-        tmpfile = newpath + '/database.db'
+    # copy or move db to new location  
+    def copyOrMove_db(self, sourcepath, targetpath, copyOrMove):
+        success = False
 
-        # in case of missing db in dbpath (first use), copy the template DB
-        if not os.path.isfile(newpath):
-            if not os.path.exists(tmpfile):
-                Path(newpath).mkdir(parents=True, exist_ok=True)
-            shutil.copy("./templates/database.db", tmpfile)
-            self.dbFile = tmpfile
+        # db in original location must exist
+        if self.check_db(sourcepath):
+            # target path may not exist, then create it
+            if not os.path.exists(self.get_db_path(targetpath)):
+                Path(self.get_db_path(targetpath)).mkdir(parents=True, exist_ok=True)
+            # copy file
+            shutil.copy(self.get_db_file(sourcepath), self.get_db_file(targetpath))
+            # remove source if desired
+            if copyOrMove == "move":
+                os.remove(self.get_db_file(sourcepath))
 
+            self.dbFile = self.get_db_path(targetpath)
+            success = True
+
+        return success
+
+
+    # db access funcs ******************************************************************************
     # connect to db - using globals to avoid having to pass the app object in all get_db_content calls
     def get_db_connection(self):
-        # global dbPath
         if os.path.isfile(self.dbFile):
             conn = sqlite3.connect(self.dbFile)
             conn.row_factory = sqlite3.Row
