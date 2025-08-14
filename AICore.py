@@ -88,90 +88,73 @@ def cos_sim(np_ay1, np_ay2):
 
 # Find fingerprint of best matching document ******************
 def vsmSimilarity(array1, array2):
-    retval = 0.0
-    match1 = []
-    match2 = []
-
-    if array1 and array2:
-        allids = [ x['id'] for x in array1 ] + [ x['id'] for x in array2 ]
-        allids = set(allids) # deduplicate
-        allids = sorted(allids)
-
-        for id in allids:
-            found = 0
-            for val in array1:
-                if val['id'] == id:
-                    found = val['occ']
-                    break
-            match1.append( found )
-
-            found = 0
-            for val in array2:
-                if val['id'] == id:
-                    found = val['occ']
-                    break
-            match2.append( found )
-
-        # maxlen = max(len(a1), len(a2))
-        # # bring both to same length
-        # for i in range(len(a1), maxlen):
-        #     a1.append(-1)
-        # for i in range(len(a2), maxlen):
-        #     a2.append(-1)
-
-        retval = cos_sim(match1, match2)
-        if retval:
-            sPrint("similarity", match1, match2, retval)
-
-    return retval
+    if not (array1 and array2):
+        return 0.0
+        
+    # Get all unique tag IDs from both arrays
+    all_ids = {tag['id'] for tag in array1 + array2}
+    
+    # Create vectors for each array
+    def create_vector(tags):
+        return [next((t['occ'] for t in tags if t['id'] == tag_id), 0) 
+                for tag_id in all_ids]
+    
+    vec1 = create_vector(array1)
+    vec2 = create_vector(array2)
+    
+    return cos_sim(vec1, vec2)
 
 # Find fingerprint of best matching document ******************
 def getBestTagMatch(foundtags, app):
-    foundfile = {}
-    bestsimil = 0
-
-    dbfilelist = app.dbhandler.getallDBfiles(app.localcfg['targetpath'], False)
-    for file in dbfilelist:
-        if file['tags']:
-            rectags = json.loads(file['tags'])
-            a = vsmSimilarity(foundtags, rectags)
-            sPrint("checked file: ", file)
-            if a > bestsimil:
-                bestsimil = a
-                foundfile = file
-                sPrint("!! found new best hit.")
-
-    # fullarray = []
-    # retarray = []
-    # bestfound = 0s
-    # currentfile = -1
-    # # compress to one file + array of tags
-    # for filetag in app.filestotags:
-    #     if filetag[0] != currentfile:
-    #         taglist = list(filter(lambda x: x[0] == filetag[0], app.filestotags))
-    #         currentfile = filetag[0]
-
-    #         tagarray = []
-    #         patharray = []
-    #         for tag in taglist:
-    #             tagarray.append(tag[1])
-    #             patharray.append(tag[2])
-                
-    #         fullarray.append([ currentfile, tagarray, patharray ])
+    if not hasattr(app, 'filestotags') or not app.filestotags:
+        return {}
         
-    # # iterate over all files
-    # for file in fullarray:
-    #     found = 0
-    #     for tag in file[1]:
-    #         if tag in foundtags:
-    #             found += 1
-
-    #     # we should only store if more than 1 hit
-    #     if found > bestfound:
-    #         bestfound = found
-    #         retarray = list(filter(lambda x: x[0] == file[0], fullarray))
-
-    return foundfile
+    best_match = {}
+    best_similarity = 0
+    
+    # Group tags by file with their occurrences
+    files_tags = {}
+    
+    # Process filestotags to group tags by file and count occurrences
+    for entry in app.filestotags:
+        # Handle both dictionary and SQLite Row objects
+        if hasattr(entry, 'keys'):  # SQLite Row object
+            file_id = entry['file_id']
+            tag_id = entry['tag_id']
+            occ = entry['occ'] if 'occ' in entry else 1
+        else:  # Dictionary
+            file_id = entry.get('file_id')
+            tag_id = entry.get('tag_id')
+            occ = entry.get('occ', 1)
+            
+        if file_id is None or tag_id is None:
+            continue
+        
+        if file_id not in files_tags:
+            files_tags[file_id] = {}
+        
+        # Store the maximum occurrence count for each tag
+        if tag_id not in files_tags[file_id] or files_tags[file_id][tag_id] < occ:
+            files_tags[file_id][tag_id] = occ
+    
+    # Find the best matching file
+    for file_id, tag_occurrences in files_tags.items():
+        # Convert tag_occurrences dict to the format expected by vsmSimilarity
+        file_tags = [{'id': tid, 'occ': occ} for tid, occ in tag_occurrences.items()]
+        
+        # Calculate similarity between found tags and file's tags
+        similarity = vsmSimilarity(foundtags, file_tags)
+        
+        if similarity > best_similarity:
+            best_similarity = similarity
+            best_match = {
+                'id': file_id,
+                'tags': json.dumps(file_tags),
+                'similarity': similarity
+            }
+            sPrint(f"New best match found for file {file_id} with similarity {similarity}")
+    
+    return best_match
 
 
 

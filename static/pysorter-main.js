@@ -158,6 +158,17 @@ function checkAllTagIntegrity() {
 };
 
 
+function rebuildFilesTags() {
+    $.ajax({
+        url: '/rebuildFilesTags',
+        type: 'POST',
+        contentType: 'application/json',
+        success: function(response) { },
+        error: function (error)     { console.log(error); }
+    });
+};
+
+
 // To get a tagb button group *************************************
 function getTagButton(item) {
     // assuming that call is coming from btn-group or one of the children

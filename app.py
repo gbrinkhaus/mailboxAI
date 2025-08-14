@@ -14,7 +14,8 @@ from datetime import datetime
 from subprocess import call as callOS, Popen
 # from numpy import matrix as Matrix
 
-from flask import Flask, render_template, request, url_for, flash, redirect, jsonify
+from flask import Flask, render_template, request, url_for, flash, redirect, jsonify, send_file
+from PIL import Image
 
 import spacy
 import de_core_news_md
@@ -116,9 +117,9 @@ def index():
                 if tag["label"] != "ACTION" and tag["text"] != "" and tag["texthints"] != "":
                     hints = tag['texthints'].split("||")
                     for hint in hints:
-                        occurence = safeFind(hint, app.filecontents) 
-                        if occurence > 0:
-                            ents.append({"id": tag["id"], "label": tag["label"], "text": tag["text"], "texthints": tag["texthints"], 'occurence': occurence})
+                        matches = safeFind(hint, app.filecontents)
+                        if matches:  # If there are any matches
+                            ents.append({"id": tag["id"], "label": tag["label"], "text": tag["text"], "texthints": tag["texthints"], 'occurence': len(matches)})
 
             # AICore candidate: do NER on recognized text and double check the results *******************
             nlp = de_core_news_md.load()
@@ -126,7 +127,8 @@ def index():
             for ent in doc.ents:
                 a = checkEnt(ent)
                 if a:
-                    ents.append({"id": a["id"], "label": a['label'], "text": a['text'], 'occurence': safeFind(a['text'], app.filecontents) })
+                    matches = safeFind(a['text'], app.filecontents)
+                    ents.append({"id": a["id"], "label": a['label'], "text": a['text'], 'occurence': len(matches)})
 
             # add all the ents to the left field, deduplicated
             app.recognizedtags = deduplicate(ents, ["label", "text"])
@@ -142,11 +144,12 @@ def index():
                     # add to confirmedtags, using active field IF the matches from the best file are also in the current file
                     if len(tag) > 0:
                         # if findInMultiList({"label": tag[0]["label"], "text": tag[0]["text"]}, app.recognizedtags, ["label", "text"]) != -1 \
-                        #         or safeFind(tag[0]['texthints'], app.filecontents) != -1 or tag[0]["label"] == "ACTION":
+                        #         or len(safeFind(tag[0]['texthints'], app.filecontents)) > 0 or tag[0]["label"] == "ACTION":
                         active = ""
                         if match[2]: 
                             active = "active" 
-                        app.confirmedtags.append( { "id": match[1], "label": tag[0]["label"], "text": tag[0]["text"], "pathlevel": match[2], "active": active, "texthints": tag[0]["texthints"] } )
+                        pathlevel = match[2] if match[2] not in (None, -1) else "-"
+                        app.confirmedtags.append( { "id": match[1], "label": tag[0]["label"], "text": tag[0]["text"], "pathlevel": pathlevel, "active": active, "texthints": tag[0]["texthints"] } )
 
         # end of POST method
         return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
@@ -246,25 +249,40 @@ def processfile():
         conn.close()
 
         if fileid > 0:
+            # Get the original file contents for case-sensitive matching
+            file_text = app.filecontents
+            
             for hint in hintarray:
                 if len(hint) > 0:
                     ent = hint[0]
                     if ent != "FILE" and ent != "DATE":
                         val = hint[1]
-                        active = hint[2]
+                        # if there is a path, store it, otherwise, set to -1
+                        if isinstance(hint[2], int) and hint[2]:
+                            active = hint[2]
+                        else:
+                            active = -1
+                        
+                        # Get or create the tag
                         tagarray = getTagByTypeAndText(ent, val)
                         if len(tagarray) > 0:
                             tagid = tagarray[0]['id']
                         else: 
                             tagid = addTagToDB(ent, val, val)
-
-                        conn = app.dbhandler.get_db_connection()
-                        conn.execute('INSERT INTO files_to_tags (file_id, tag_id, is_folder) VALUES (?, ?, ?)', (fileid, tagid, active))
-                        conn.commit()
-                        conn.close()
-
-            # After all tags are associated, update the 'tags' field in 'files' table using reusable method
-            app.dbhandler.update_file_tags_field(app, fileid)
+                        
+                        occurrence_count = 0
+                        # Count occurrences using safeFind - use the tag text from the first item in tagarray
+                        if tagarray and len(tagarray) > 0 and 'texthints' in tagarray[0]:
+                            for tag in tagarray[0]['texthints'].split("||"):   
+                                matches = safeFind(tag, file_text)
+                                # Add the number of matches found
+                                occurrence_count += len(matches)
+                            
+                        # Use the new method to add tag with the actual occurrence count
+                        app.dbhandler.add_tag_to_file(fileid, tagid, active, occurrence_count)
+                        
+                        if app.debug:
+                            print(f"Added tag: {val} (ID: {tagid}) with {occurrence_count} occurrences")
 
         flash('File ' + app.fullfilename + ' written!', "success")
         resetApp(app)
@@ -440,6 +458,13 @@ def checkAllTagIntegrity():
     return json.dumps({'success':success}), 200, {'ContentType':'application/json'}
 
 
+@app.route('/rebuildFilesTags', methods=('POST',))
+def rebuildFilesTags():
+    """Repair action: rebuild compact tags vector for all files."""
+    app.dbhandler.rebuild_all_files_tags()
+    return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+
+
 # Find any type of date in a text ************
 def findDatesInText(text):
     retarray = []
@@ -585,19 +610,25 @@ def addTagToDB(type, text, texthints):
     ## IF tag not exists in database, INSERT it
     else:
         if not len(result) > 0:
-            conn.execute('INSERT INTO tags (type, tag, texthints) VALUES (?, ?, ?)', (type, text, newhints))
+            # Insert and get the new tag's ID
+            cursor = conn.execute('INSERT INTO tags (type, tag, texthints) VALUES (?, ?, ?)', 
+                               (type, text, newhints))
+            hint_id = cursor.lastrowid
         else:
             print("mismatch in storedtags, tag found in db but not storedtags", text, type)
-
+            # If we got here, we found a matching tag in result
+            hint_id = result[0]['id']
+    
+    # For existing tags, we should have the ID from currenthints
+    if len(currenthints) > 0:
+        hint_id = currenthints[0]['id']
+    
     conn.commit()
     conn.close()
 
-    # Insert the TAG ID into the current tag list of the app **********
-    hint = app.dbhandler.get_db_tags(type, text)
-    if hint != -1:
-        hint_id = hint[0]['id']
-        if not hint_id in app.currenttags and hint_id != -1:
-            app.currenttags.append(hint_id)
+    # Add the tag ID to current tags if it's not already there
+    if hint_id != -1 and hint_id not in app.currenttags:
+        app.currenttags.append(hint_id)
 
     app.storedtags = app.dbhandler.get_db_tags()
     return hint_id 
@@ -796,3 +827,127 @@ for x in range(len(thearray)):
         sPrint(thearray.pop(x - popctr), thearray)
         popctr += 1
 """
+
+
+# ========================= Batch Split (Marker-based) Routes =========================
+from flask import send_file
+
+@app.route('/split/marker/download', methods=['GET'])
+def split_marker_download():
+    """Serve the official separator page PDF. Ensure it's generated first."""
+    ensure_marker_assets(app)
+    paths = ensure_marker_assets(app)
+    return send_file(paths['pdf'], as_attachment=True, download_name='MAILBOXAI_Separator.pdf')
+
+
+@app.route('/split/marker/preview', methods=['POST'])
+def split_marker_preview():
+    """Compute marker positions and proposed split points for a given PDF.
+
+    JSON body:
+      - filename: optional; PDF name in source folder. If omitted, uses app.currentfile in workdir.
+      - ham_thr: optional int (default 10)
+      - dpi: optional int (default 150)
+      - max_pages: optional int for preview limit
+    Returns JSON with markers and splits.
+    """
+    if request.is_json:
+        payload = request.get_json() or {}
+    else:
+        payload = {}
+
+    filename = payload.get('filename', '')
+    ham_thr = int(payload.get('ham_thr', 10))
+    dpi = int(payload.get('dpi', 150))
+    max_pages = payload.get('max_pages')
+    if max_pages is not None:
+        try:
+            max_pages = int(max_pages)
+        except Exception:
+            max_pages = None
+
+    # Resolve path
+    if filename:
+        pdf_path = os.path.join(app.localcfg['sourcepath'], filename)
+    elif getattr(app, 'currentfile', ''):
+        pdf_path = os.path.join(app.workdir, app.currentfile)
+    else:
+        return jsonify({"success": False, "error": "No file specified and no current file selected."}), 400
+
+    try:
+        assets = ensure_marker_assets(app)
+        marker_img = Image.open(assets['png'])
+        pages = rasterize_pdf_pages(pdf_path, dpi=dpi, max_pages=max_pages)
+        markers = find_marker_pages(pages, marker_img, ham_thr=ham_thr)
+        splits = build_split_points_from_markers(markers, total_pages=len(pages))
+        return jsonify({
+            "success": True,
+            "file": os.path.basename(pdf_path),
+            "total_pages": len(pages),
+            "marker_indices": markers,
+            "split_starts": splits
+        })
+    except Exception as exc:
+        sPrint("split_marker_preview error:", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route('/split/marker/confirm', methods=['POST'])
+def split_marker_confirm():
+    """Perform the actual split based on detected markers and write PDFs.
+
+    JSON body:
+      - filename: optional; if omitted uses app.currentfile in workdir
+      - ham_thr: optional; detection threshold (default 10)
+      - dpi: optional; rasterization dpi (default 150)
+      - drop_markers: bool (default True); remove separator pages from outputs
+      - out_subdir: optional; create a subfolder in sourcepath for outputs
+    Returns JSON with written file paths and page ranges.
+    """
+    if request.is_json:
+        payload = request.get_json() or {}
+    else:
+        payload = {}
+
+    filename = payload.get('filename', '')
+    ham_thr = int(payload.get('ham_thr', 10))
+    dpi = int(payload.get('dpi', 150))
+    drop_markers = bool(payload.get('drop_markers', True))
+    out_subdir = payload.get('out_subdir')
+
+    if filename:
+        pdf_path = os.path.join(app.localcfg['sourcepath'], filename)
+        base_dir = app.localcfg['sourcepath']
+    elif getattr(app, 'currentfile', ''):
+        pdf_path = os.path.join(app.workdir, app.currentfile)
+        base_dir = app.workdir
+    else:
+        return jsonify({"success": False, "error": "No file specified and no current file selected."}), 400
+
+    try:
+        assets = ensure_marker_assets(app)
+        marker_img = Image.open(assets['png'])
+        # Full set of pages for accurate splitting
+        pages = rasterize_pdf_pages(pdf_path, dpi=dpi)
+        marker_indices = find_marker_pages(pages, marker_img, ham_thr=ham_thr)
+        split_starts = build_split_points_from_markers(marker_indices, total_pages=len(pages))
+
+        out_dir = base_dir
+        if out_subdir:
+            out_dir = os.path.join(base_dir, out_subdir)
+
+        drop_pages = marker_indices if drop_markers else []
+        outputs = split_pdf_by_pages(pdf_path, split_starts, out_dir, drop_pages=drop_pages)
+
+        return jsonify({
+            "success": True,
+            "outputs": [
+                {"path": p, "range": {"start": r[0], "end": r[1]}} for (p, r) in outputs
+            ],
+            "marker_indices": marker_indices,
+            "split_starts": split_starts,
+            "out_dir": out_dir
+        })
+    except Exception as exc:
+        sPrint("split_marker_confirm error:", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
