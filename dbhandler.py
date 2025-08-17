@@ -111,6 +111,78 @@ class TagsRepo(BaseRepo):
         finally:
             conn.close()
 
+    def add_tag(self, type, text, texthints):
+        """
+        Add or update a tag in the database.
+        
+        Args:
+            type: The type of the tag (e.g., 'PERSON', 'LOCATION')
+            text: The text of the tag
+            texthints: Additional hints or context for the tag
+            
+        Returns:
+            int: The ID of the tag, or -1 if the tag couldn't be added/updated
+        """
+        newhints = ""
+        conn = self.cp.connect()
+        if not conn:
+            return -1
+            
+        try:
+            # Get existing tags with the same text and type
+            currenthints = self.find_by_type_and_text(type, text)
+            otherhints = self.find_by_text(text)
+            newhints = texthints
+            hint_id = -1
+
+            # If tag already exists with another label, warn and return -1
+            if len(otherhints) > 1 or (len(otherhints) == 1 and otherhints[0]['type'] != type and type != "ACTION"):
+                return hint_id 
+
+            # Check if tag exists
+            result = self.find_by_type_and_text(type, text)
+
+            if len(result) > 0:
+                dbid = result[0]['id']
+                if not len(currenthints) > 0:
+                    print("mismatch in storedtags, tag not found ", text, type)
+                    return hint_id 
+
+            # If tag exists in database, update it
+            if len(currenthints) > 0:
+                id = currenthints[0]['id']
+                if type != "ACTION":
+                    newhints = currenthints[0]['texthints']
+                    if not texthints in newhints.split("||"): 
+                        newhints += "||" + texthints
+
+                conn.execute('UPDATE tags SET texthints = ? WHERE id = ?', (newhints, id))
+                conn.commit()
+
+            # If tag doesn't exist, insert it
+            else:
+                if not len(result) > 0:
+                    cursor = conn.execute('INSERT INTO tags (type, tag, texthints) VALUES (?, ?, ?)', 
+                                       (type, text, newhints))
+                    conn.commit()
+                    hint_id = cursor.lastrowid
+                else:
+                    print("mismatch in storedtags, tag found in db but not storedtags", text, type)
+                    hint_id = result[0]['id']
+            
+                # For existing tags, get the ID from currenthints
+                if len(currenthints) > 0:
+                    hint_id = currenthints[0]['id']
+                
+            return hint_id
+            
+        except Exception as e:
+            print(f"Error in addTagToDB: {e}")
+            return -1
+            
+        finally:
+            conn.close()
+
 
 class FilesToTagsRepo(BaseRepo):
     # Access for table `files_to_tags` (file_id, tag_id, is_folder, occ)
@@ -687,3 +759,17 @@ class dbhandler:
                     print("guessing it to be:", guessTag[0]['id'], guessTag[0]['text'])
                     # self.writeTagToFile(fileid, id, x)
 
+
+    def addTagToDB(self, type, text, texthints):
+        """
+        Add or update a tag in the database.
+        
+        Args:
+            type: The type of the tag (e.g., 'PERSON', 'LOCATION')
+            text: The text of the tag
+            texthints: Additional hints or context for the tag
+            
+        Returns:
+            int: The ID of the tag, or -1 if the tag couldn't be added/updated
+        """
+        return self.tags.add_tag(type, text, texthints)

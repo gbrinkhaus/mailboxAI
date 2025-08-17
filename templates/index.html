@@ -77,6 +77,13 @@
                         <button class="btn btn-ner-cat fas fa-light noHover"></button>
                         <button type="button" class="btn btn-primary"
                             onclick="javascript:callOCR(this.innerHTML);">{{infile['name']}}</button>
+                        {% if infile['type'] == 'pdf' %}
+                        <button type="button" class="btn btn-ner-cat"
+                            onclick="javascript:splitPdfByMarkers('{{ infile['path'] }}/{{ infile['name'] }}')"
+                            title="Split PDF by Markers">
+                            <i class="fas fa-scissors"></i>
+                        </button>
+                        {% endif %}
                         <!--button type="button" class="btn btn-ner-delete">x</button-->
                     </div>
                 </div>

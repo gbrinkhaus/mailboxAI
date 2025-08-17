@@ -1,8 +1,7 @@
 Installation:
 
-- Denkfehler: db im local pfad
 
-- Fully delete local source folder
+
 - install brew
 
 - install python 3.12.0 with pyenv, not pip
@@ -25,7 +24,13 @@ In VSCode, use:
 
 Open:
 
-- Umlautbug beim processfile?
+- Idee für refactor:
+	Doublette bei addTag (jinja vs. js) entfernen:
+		Erst nur call von addTag bei load
+		Dann Stück für Stück jinja entfernen
+		addTag in js ist richtig, jinja macht es falsch
+		
+
 - Komplette Erzeugung der Tags
 - Fehlende Dateien sehen können
 
@@ -61,6 +66,10 @@ Open:
 - Save docs to zip (backup)
 
 Done:
+
+- Denkfehler: db im local pfad
+
+- Umlautbug beim processfile?
 
 - Better way to guess folders
 - Tagcheck in Settings verschieben

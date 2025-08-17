@@ -255,6 +255,7 @@ function selectFolder(text, type, hint, level) {
 
 // To write a tag into a specific tag form field *************************************
 function addTag(text, type, hint, level = "-") {
+    // console.log("addTag called with text: " + text + ", type: " + type + ", hint: " + hint + ", level: " + level);
 
     text = text.trim();
     type = type.trim();
@@ -555,3 +556,55 @@ function setPdfDoc(value) {
     document.getElementById('modal-pic').data = value;
     // console.log(document.getElementById('modal-pic').data);
 };
+
+// Split PDF by markers
+function splitPdfByMarkers(pdfPath) {
+    const filename = pdfPath.split('/').pop();
+    
+    // Show loading state
+    const splitButton = event?.target?.closest('.split-pdf-btn');
+    if (splitButton) {
+        splitButton.disabled = true;
+        splitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Splitting...';
+    }
+    
+    fetch('/split/markers/confirm', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'  // Helps identify AJAX requests in Flask
+        },
+        body: JSON.stringify({
+            filename: filename
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || 'Failed to split PDF') });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            if (data.outputs && data.outputs.length > 0) {
+                window.location.reload();
+            } else {
+                throw new Error('No output files were created');
+            }
+        } else {
+            throw new Error(data.error || 'Failed to split PDF');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error: ' + (error.message || 'Failed to process PDF'));
+    })
+    .finally(() => {
+        // Reset button state
+        if (splitButton) {
+            splitButton.disabled = false;
+            splitButton.innerHTML = '<i class="fas fa-cut"></i>';
+        }
+    });
+}

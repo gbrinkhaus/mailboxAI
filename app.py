@@ -7,8 +7,7 @@ def getTagByTypeAndText(type, text):
         return list(filter(lambda x: x['label'] == type and compare_str(x['text'], text), app.storedtags))
 
 # Imports must happen after funcs to avoid recursion ******************************************
-import os, shutil, re, signal
-from pathlib import Path
+import os, shutil, re, signal, sys
 from datetime import datetime
 
 from subprocess import call as callOS, Popen
@@ -28,6 +27,26 @@ from helperfuncs import *
 os.system('clear')
 
 app = Flask(__name__)
+
+# Verify environment
+print("\n=== Environment Verification ===")
+print(f"Python executable: {sys.executable}")
+print(f"Python path: {sys.path}")
+print(f"Working directory: {os.getcwd()}")
+
+try:
+    import pikepdf
+    print(f"pikepdf version: {pikepdf.__version__}")
+except ImportError:
+    print("ERROR: pikepdf not found. Attempting to install...")
+    try:
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pikepdf"])
+        import pikepdf
+        print(f"Successfully installed pikepdf version: {pikepdf.__version__}")
+    except Exception as e:
+        print(f"Failed to install pikepdf: {e}")
+        sys.exit(1)
 
 initApp(app)
 # reset the vars that will be cleaned after each document
@@ -145,9 +164,7 @@ def index():
                     if len(tag) > 0:
                         # if findInMultiList({"label": tag[0]["label"], "text": tag[0]["text"]}, app.recognizedtags, ["label", "text"]) != -1 \
                         #         or len(safeFind(tag[0]['texthints'], app.filecontents)) > 0 or tag[0]["label"] == "ACTION":
-                        active = ""
-                        if match[2]: 
-                            active = "active" 
+                        active = "active" if match[2] in (1, 2, 3) else ""
                         pathlevel = match[2] if match[2] not in (None, -1) else "-"
                         app.confirmedtags.append( { "id": match[1], "label": tag[0]["label"], "text": tag[0]["text"], "pathlevel": pathlevel, "active": active, "texthints": tag[0]["texthints"] } )
 
@@ -268,7 +285,7 @@ def processfile():
                         if len(tagarray) > 0:
                             tagid = tagarray[0]['id']
                         else: 
-                            tagid = addTagToDB(ent, val, val)
+                            tagid = app.dbhandler.addTagToDB(ent, val, val)
                         
                         occurrence_count = 0
                         # Count occurrences using safeFind - use the tag text from the first item in tagarray
@@ -567,71 +584,15 @@ def addTag():
 
     if request.method == 'POST':
         jsonobj = request.get_json()
-
-        addTagToDB(jsonobj['type'], jsonobj['text'], jsonobj['hint'])
+        app.dbhandler.addTagToDB(jsonobj['type'], jsonobj['text'], jsonobj['hint'])
 
     # Return the type of tag in order to be able to act on it **********
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 
 # Func to ADD a TAG to the DB ***********************************************
-def addTagToDB(type, text, texthints):
-    newhints = ""
-    conn = app.dbhandler.get_db_connection()
-
-    # Insert the TAG into DB **********
-    currenthints = getTagByTypeAndText(type, text)
-    otherhints = getTagsByText(text)
-    newhints = texthints
-    hint_id = -1
-
-    ## IF tag already exists with another label, warn
-    if len(otherhints) > 1 or (len(otherhints) == 1 and otherhints[0]['label'] != type and type != "ACTION"):
-        return hint_id 
-
-    result = conn.execute('SELECT * FROM tags WHERE tag = ? AND type = ? AND tag IS NOT NULL', ( text, type )).fetchall()
-    if len(result) > 0:
-        dbid = result[0]['id']
-        if not len(currenthints) > 0:
-            print("mismatch in storedtags, tag not found ", text, type)
-            return hint_id 
-
-    ## IF tag already exists in database, but hint not, then UPDATE
-    if len(currenthints) > 0:
-        # append the new hint to the existing hints if appropriate
-        id = currenthints[0]['id']
-        if type != "ACTION":
-            newhints = currenthints[0]['texthints']
-            if not texthints in newhints.split("||"): 
-                newhints += "||" + texthints
-
-        conn.execute('UPDATE tags SET texthints = ? WHERE id = ?', (newhints, id))
-
-    ## IF tag not exists in database, INSERT it
-    else:
-        if not len(result) > 0:
-            # Insert and get the new tag's ID
-            cursor = conn.execute('INSERT INTO tags (type, tag, texthints) VALUES (?, ?, ?)', 
-                               (type, text, newhints))
-            hint_id = cursor.lastrowid
-        else:
-            print("mismatch in storedtags, tag found in db but not storedtags", text, type)
-            # If we got here, we found a matching tag in result
-            hint_id = result[0]['id']
-    
-    # For existing tags, we should have the ID from currenthints
-    if len(currenthints) > 0:
-        hint_id = currenthints[0]['id']
-    
-    conn.commit()
-    conn.close()
-
-    # Add the tag ID to current tags if it's not already there
-    if hint_id != -1 and hint_id not in app.currenttags:
-        app.currenttags.append(hint_id)
-
-    app.storedtags = app.dbhandler.get_db_tags()
-    return hint_id 
+# This function has been moved to dbhandler.py as a method of the dbhandler class
+# Please use app.dbhandler.addTagToDB() instead
 
 
 # Toggle move file settings ************
@@ -818,7 +779,7 @@ def closeApp():
     return json.dumps({ "success": True, "message": "Server is shutting down..." })
 
 
-# Heres how to pop in array iteration: Use len(), adjust indexes for popped items
+# Heres how to pop in an array iteration: Use len(), adjust indexes for popped items
 """ 
 thearray = [1,2,3,4,5,6]
 popctr = 0
@@ -828,126 +789,110 @@ for x in range(len(thearray)):
         popctr += 1
 """
 
+def extract_markers(pdf_path, workdir):
+    reader = PdfReader(pdf_path)
+    retarray = []
+    pagenr = 0
 
-# ========================= Batch Split (Marker-based) Routes =========================
-from flask import send_file
+    for page in reader.pages:
+        pagenr += 1
+        pagecontents = page.extract_text()
+        if len(pagecontents) < 3:
+            pagecontents = getPDFOCR(filename, workdir, pagenr)
+        if pagecontents.find("NEW PAGE") != -1 and len(pagecontents) < 15:
+            retarray.append({"page": pagenr})
 
-@app.route('/split/marker/download', methods=['GET'])
-def split_marker_download():
-    """Serve the official separator page PDF. Ensure it's generated first."""
-    ensure_marker_assets(app)
-    paths = ensure_marker_assets(app)
-    return send_file(paths['pdf'], as_attachment=True, download_name='MAILBOXAI_Separator.pdf')
-
-
-@app.route('/split/marker/preview', methods=['POST'])
-def split_marker_preview():
-    """Compute marker positions and proposed split points for a given PDF.
-
-    JSON body:
-      - filename: optional; PDF name in source folder. If omitted, uses app.currentfile in workdir.
-      - ham_thr: optional int (default 10)
-      - dpi: optional int (default 150)
-      - max_pages: optional int for preview limit
-    Returns JSON with markers and splits.
-    """
-    if request.is_json:
-        payload = request.get_json() or {}
-    else:
-        payload = {}
-
-    filename = payload.get('filename', '')
-    ham_thr = int(payload.get('ham_thr', 10))
-    dpi = int(payload.get('dpi', 150))
-    max_pages = payload.get('max_pages')
-    if max_pages is not None:
-        try:
-            max_pages = int(max_pages)
-        except Exception:
-            max_pages = None
-
-    # Resolve path
-    if filename:
-        pdf_path = os.path.join(app.localcfg['sourcepath'], filename)
-    elif getattr(app, 'currentfile', ''):
-        pdf_path = os.path.join(app.workdir, app.currentfile)
-    else:
-        return jsonify({"success": False, "error": "No file specified and no current file selected."}), 400
+    return retarray
+    
+# ========================= Batch Split (markers-based) Routes =========================
+@app.route('/split/markers/confirm', methods=['POST'])
+def split_by_markers():
 
     try:
-        assets = ensure_marker_assets(app)
-        marker_img = Image.open(assets['png'])
-        pages = rasterize_pdf_pages(pdf_path, dpi=dpi, max_pages=max_pages)
-        markers = find_marker_pages(pages, marker_img, ham_thr=ham_thr)
-        splits = build_split_points_from_markers(markers, total_pages=len(pages))
-        return jsonify({
-            "success": True,
-            "file": os.path.basename(pdf_path),
-            "total_pages": len(pages),
-            "marker_indices": markers,
-            "split_starts": splits
-        })
-    except Exception as exc:
-        sPrint("split_marker_preview error:", exc)
-        return jsonify({"success": False, "error": str(exc)}), 500
+        if request.is_json:
+            payload = request.get_json() or {}
+        else:
+            payload = {}
 
+        sPrint(f"Received split request with payload: {payload}")
+        
+        filename = payload.get('filename', '')
+        out_subdir = payload.get('out_subdir', None)
 
-@app.route('/split/marker/confirm', methods=['POST'])
-def split_marker_confirm():
-    """Perform the actual split based on detected markers and write PDFs.
+        # Resolve path
+        if filename:
+            pdf_path = os.path.join(app.localcfg['sourcepath'], filename)
+            sPrint(f"Using filename from payload: {pdf_path}")
+        elif getattr(app, 'currentfile', ''):
+            pdf_path = os.path.join(app.workdir, app.currentfile)
+            sPrint(f"Using current file from app: {pdf_path}")
+        else:
+            error_msg = "No file specified and no current file selected."
+            sPrint(error_msg)
+            return jsonify({"success": False, "error": error_msg}), 400
 
-    JSON body:
-      - filename: optional; if omitted uses app.currentfile in workdir
-      - ham_thr: optional; detection threshold (default 10)
-      - dpi: optional; rasterization dpi (default 150)
-      - drop_markers: bool (default True); remove separator pages from outputs
-      - out_subdir: optional; create a subfolder in sourcepath for outputs
-    Returns JSON with written file paths and page ranges.
-    """
-    if request.is_json:
-        payload = request.get_json() or {}
-    else:
-        payload = {}
+        # Verify file exists and is a PDF
+        if not os.path.exists(pdf_path):
+            error_msg = f"File not found: {pdf_path}"
+            sPrint(error_msg)
+            return jsonify({"success": False, "error": error_msg}), 404
+            
+        if not pdf_path.lower().endswith('.pdf'):
+            error_msg = f"Not a PDF file: {pdf_path}"
+            sPrint(error_msg)
+            return jsonify({"success": False, "error": error_msg}), 400
 
-    filename = payload.get('filename', '')
-    ham_thr = int(payload.get('ham_thr', 10))
-    dpi = int(payload.get('dpi', 150))
-    drop_markers = bool(payload.get('drop_markers', True))
-    out_subdir = payload.get('out_subdir')
+        # Create output directory
+        # base_dir = os.path.dirname(pdf_path)
+        # if out_subdir:
+        #     out_dir = os.path.join(base_dir, out_subdir)
+        # else:
+        #     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        #     out_dir = os.path.join(base_dir, f"{base_name}_split")
+        
+        # sPrint(f"Creating output directory: {out_dir}")
+        # Path(out_dir).mkdir(parents=True, exist_ok=True)
 
-    if filename:
-        pdf_path = os.path.join(app.localcfg['sourcepath'], filename)
-        base_dir = app.localcfg['sourcepath']
-    elif getattr(app, 'currentfile', ''):
-        pdf_path = os.path.join(app.workdir, app.currentfile)
-        base_dir = app.workdir
-    else:
-        return jsonify({"success": False, "error": "No file specified and no current file selected."}), 400
-
-    try:
-        assets = ensure_marker_assets(app)
-        marker_img = Image.open(assets['png'])
-        # Full set of pages for accurate splitting
-        pages = rasterize_pdf_pages(pdf_path, dpi=dpi)
-        marker_indices = find_marker_pages(pages, marker_img, ham_thr=ham_thr)
-        split_starts = build_split_points_from_markers(marker_indices, total_pages=len(pages))
-
-        out_dir = base_dir
-        if out_subdir:
-            out_dir = os.path.join(base_dir, out_subdir)
-
-        drop_pages = marker_indices if drop_markers else []
-        outputs = split_pdf_by_pages(pdf_path, split_starts, out_dir, drop_pages=drop_pages)
+        # Extract markers and get split points
+        sPrint("Extracting markers...")
+        markers = extract_markers(pdf_path, app.localcfg['sourcepath'])
+        
+        if not markers:
+            error_msg = "No markers found in the PDF."
+            sPrint(error_msg)
+            return jsonify({
+                "success": False,
+                "error": error_msg
+            }), 400
+            
+        sPrint(f"Found {len(markers)} markers: {markers}")
+        
+        # Get the page numbers where we should split
+        split_starts = sorted(set([b['page'] for b in markers]))
+        sPrint(f"Split points: {split_starts}")
+        
+        # Perform the split
+        sPrint("Starting PDF split operation...")
+        outputs = split_pdf_by_pages(app.localcfg['sourcepath'], filename, split_starts)
+        sPrint(f"PDF split completed. Created {len(outputs)} output files.")
 
         return jsonify({
             "success": True,
             "outputs": [
                 {"path": p, "range": {"start": r[0], "end": r[1]}} for (p, r) in outputs
             ],
-            "marker_indices": marker_indices,
+            "markers": markers,
             "split_starts": split_starts,
-            "out_dir": out_dir
+            "out_dir": pdf_path,
+            "message": f"Successfully split PDF into {len(outputs)} files"
         })
+
     except Exception as exc:
-        sPrint("split_marker_confirm error:", exc)
-        return jsonify({"success": False, "error": str(exc)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        sPrint(f"Error in split_by_markers: {exc}\n{error_trace}")
+        return jsonify({
+            "success": False, 
+            "error": f"An error occurred while processing the PDF: {exc}",
+            "details": str(exc)
+        }), 500

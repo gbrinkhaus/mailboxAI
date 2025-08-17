@@ -19,13 +19,6 @@
                     id="dbdir" readonly />
             </div>
 
-        <!-- ai tried to create divider:
-        div class="col-12 text-start mt-5 mb-4">
-            <h3>Batch splitting</h3>
-            <p class="text-muted small">Use a separator page between letters when scanning a batch. Download and print the official separator page below. When processing, use the "Split by separator" action (coming to Documents view) to split automatically.</p>
-            <a class="btn btn-outline-primary" href="{{ url_for('split_marker_download') }}">Download separator page (PDF)</a>
-        </div-->
-                
             <div class="col-1">
                 <button type="button" class="btn fas fa-regular text-secondary"
                     onclick="openFolderPicker('dbdir')"></button>
@@ -66,6 +59,14 @@
             </div>
         </div>
     </form>
+
+
+    <div class="col-12 text-start mt-5 mb-4">
+        <h3>Batch splitting</h3>
+        <p class="text-muted small">Use a separator page between letters when scanning a batch. Download and print the official separator page below. When processing, use the "Split by separator" action (coming to Documents view) to split automatically.</p>
+        <a class="btn btn-outline-primary" href="./templates/split_marker.pdf" download>Download separator page (PDF)</a>
+    </div>
+
 
     <div class="col-12 text-start mt-5 mb-4">
         <h3>Actions</h3>
