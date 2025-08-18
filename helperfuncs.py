@@ -269,49 +269,52 @@ def resetApp(app):
 
 import io
 import math
+from datetime import datetime
 from typing import List, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 from pdf2image import convert_from_path
 from PyPDF2 import PdfReader, PdfWriter
 
-def split_pdf_by_pages(pathonly: str, filename: str, split_starts: List[int]) -> List[Tuple[str, Tuple[int, int]]]:
+def split_pdf_by_pages(pathonly: str, filename: str, split_starts: List[int]) -> int:
     """Split a PDF given start indices. Returns list of (filepath, (start,end)) ranges.
-    drop_pages: optional list of page indices to exclude (e.g., marker pages).
-    """
+    drop_pages: optional list of page indices to exclude (e.g., marker pages)."""
+
+    if not split_starts:
+        return 0
+
+    timestamp = datetime.now().strftime("%d%m%y-%H.%M.%S")
 
     pdf_path = os.path.join(pathonly, filename)
-
-    drop_set = split_starts
-    # Always include the first page if not already included
-    if 0 not in split_starts:
-        split_starts.insert(0, 0)
-        sPrint(f"Added first page as split point. New split points: {split_starts}")
-
     reader = PdfReader(pdf_path)
     n = len(reader.pages)
-    if not split_starts:
-        return []
-    split_starts = sorted(set([s for s in split_starts if 0 <= s < n]))
-    # Build ranges as [start, next_start) and finalize last to n
-    ranges = []
-    for i, s in enumerate(split_starts):
-        e = split_starts[i + 1] if i + 1 < len(split_starts) else n
-        ranges.append((s, e))
 
-    outputs = []
-    for idx, (s, e) in enumerate(ranges, start=1):
-        writer = PdfWriter()
-        for p in range(s, e):
-            if p in drop_set:
-                continue
-            writer.add_page(reader.pages[p])
-        if len(writer.pages) == 0:
-            continue
-        outpath = os.path.join(pathonly, f"{filename}_part_{idx:03d}.pdf")
-        with open(outpath, "wb") as f:
-            writer.write(f)
-        outputs.append((outpath, (s, e - 1)))
-    return outputs
+    # first page must be a "virtual" delimiter
+    if not 0 in split_starts:
+        split_starts.append(0) 
+
+    # if last page is not a delimiter, add one at the end
+    if not n in split_starts:
+        split_starts.append(n+1)
+    split_starts = sorted(split_starts)
+
+    success_count = 0
+    for idx in range(len(split_starts) -1):
+        next_set = [1 + split_starts[idx], split_starts[idx+1] -1]
+
+        # only if there are pages to write
+        if next_set[1] - next_set[0] > 0:
+            outpath = os.path.join(pathonly, f"split_{timestamp}_part{idx:03d}.pdf")
+            writer = PdfWriter()
+
+            for page in range( next_set[0], next_set[1] + 1):
+                writer.add_page(reader.pages[page - 1])
+
+            with open(outpath, "wb") as f:
+                writer.write(f)
+
+            success_count += 1
+
+    return success_count
 
 

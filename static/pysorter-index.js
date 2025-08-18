@@ -1,58 +1,52 @@
 // globals
 
-// When doc ready, check whether a file has been OCRed - if, so, we need to display form elements **
+// When doc ready, initialize all page functionality
 $(document).ready(function() {
-    //console.log( "ready!" );
-    //alert(filename);
-
+    // Check if a file has been OCRed and handle UI state
     var hide = true;
     var url = window.location.pathname;
     var filename = url.substring(url.lastIndexOf('/')+1);
 
-    // number of levels is not dynamic anymore
+    // Number of levels is not dynamic anymore
     maxlevels = 3;
 
-    // if url string empty, it is home page
-    if (filename == '') {
-        if(document.getElementById('ner-tags').innerHTML.trim().length)
+    // If url string empty, it is home page
+    if (filename === '') {
+        if(document.getElementById('ner-tags').innerHTML.trim().length) {
             hide = false;
+        }
 
-        // hide file contents, if no file is chosen
+        // Toggle UI elements based on file selection
         document.getElementById('ocrresults').hidden = hide;
         document.getElementById('folderforms').hidden = hide;
-
-        // hide header, if file is chosen
         document.getElementById('filepicker').hidden = !hide;
         document.getElementById('header').hidden = !hide;
 
-        // register hotkey handler, but only for Homepage
+        // Register hotkey handler, but only for Homepage
         document.addEventListener('keydown', doc_keyDown, false);
-
         checkSendButton();
     }
 
+    // Handle text selection for tagging
     document.getElementById('filecontents').addEventListener("mouseup", function(event) {
         var text = window.getSelection().toString().trim();
-        // $("#filecontents").append("<div>" + text + "</div>");
         console.log("mouseup: " + text);
 
         selectionEndTimeout = setTimeout(function () {
             if(text.length > 2 && text.length < 200) {
-                // $('#tagModal').moveTo( window.getSelection().getRangeAt(0).getBoundingClientRect() );
-                rect = window.getSelection().getRangeAt(0).getBoundingClientRect();
+                var rect = window.getSelection().getRangeAt(0).getBoundingClientRect();
                 openNewTagWindow(text, "MISC", text, rect.left, rect.top);
-                // console.log("mouseup: " + text);
-                }
+            }
         }, 200);
-
     }, false);
-    
-/*    document.addEventListener("selectionchange", function(event) {
-        var text = window.getSelection().toString();
-        $(".filecontents").append("<div>" + text + "</div>");
-        // console.log("selchange: " + text);
-    }, false); */
 
+    // Check for and display any pending toast notifications
+    const pendingToast = sessionStorage.getItem('pendingToast');
+    if (pendingToast) {
+        const { message, type } = JSON.parse(pendingToast);
+        showToast(message, type);
+        sessionStorage.removeItem('pendingToast');
+    }
 });
 
 
@@ -557,6 +551,45 @@ function setPdfDoc(value) {
     // console.log(document.getElementById('modal-pic').data);
 };
 
+// Show Bootstrap toast
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toastContainer');
+    const toastId = 'toast-' + Date.now();
+    const typeToClass = {
+        'info': 'bg-primary-subtle',
+        'success': 'bg-success-subtle',
+        'warning': 'bg-warning-subtle',
+        'error': 'bg-danger-subtle',
+        'danger': 'bg-danger-subtle'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-dark ${typeToClass[type] || 'bg-light'} border-0`;
+    toast.style.fontSize = '1.0rem';  // Larger text
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.id = toastId;
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body text-dark" style="font-size: 1.1rem;">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-dark me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+    bsToast.show();
+    
+    // Remove toast after it's hidden
+    toast.addEventListener('hidden.bs.toast', function () {
+        toast.remove();
+    });
+}
+
 // Split PDF by markers
 function splitPdfByMarkers(pdfPath) {
     const filename = pdfPath.split('/').pop();
@@ -585,20 +618,19 @@ function splitPdfByMarkers(pdfPath) {
         return response.json();
     })
     .then(data => {
-        if (data.success) {
-            // Show success message
-            if (data.outputs && data.outputs.length > 0) {
-                window.location.reload();
-            } else {
-                throw new Error('No output files were created');
-            }
-        } else {
-            throw new Error(data.error || 'Failed to split PDF');
+        // Store toast data in session storage before reloading
+        if (data.toast) {
+            sessionStorage.setItem('pendingToast', JSON.stringify({
+                message: data.toast.message,
+                type: data.toast.type
+            }));
         }
+        // Reload the page
+        window.location.reload();
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error: ' + (error.message || 'Failed to process PDF'));
+        showToast(error.message || 'Failed to process PDF', 'danger');
     })
     .finally(() => {
         // Reset button state

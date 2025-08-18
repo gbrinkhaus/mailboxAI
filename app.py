@@ -799,8 +799,9 @@ def extract_markers(pdf_path, workdir):
         pagecontents = page.extract_text()
         if len(pagecontents) < 3:
             pagecontents = getPDFOCR(filename, workdir, pagenr)
-        if pagecontents.find("NEW PAGE") != -1 and len(pagecontents) < 15:
-            retarray.append({"page": pagenr})
+        # add page as separator if it contains "NEW PAGE" and nothing else
+        if pagecontents.find("NEW PAGE") != -1 and len(pagecontents) <= 10:
+            retarray.append(pagenr)
 
     return retarray
     
@@ -814,77 +815,44 @@ def split_by_markers():
         else:
             payload = {}
 
-        sPrint(f"Received split request with payload: {payload}")
-        
+        sPrint(f"Received split request with parameters: {payload}")
         filename = payload.get('filename', '')
-        out_subdir = payload.get('out_subdir', None)
 
         # Resolve path
         if filename:
             pdf_path = os.path.join(app.localcfg['sourcepath'], filename)
-            sPrint(f"Using filename from payload: {pdf_path}")
-        elif getattr(app, 'currentfile', ''):
-            pdf_path = os.path.join(app.workdir, app.currentfile)
-            sPrint(f"Using current file from app: {pdf_path}")
         else:
             error_msg = "No file specified and no current file selected."
-            sPrint(error_msg)
             return jsonify({"success": False, "error": error_msg}), 400
 
         # Verify file exists and is a PDF
-        if not os.path.exists(pdf_path):
-            error_msg = f"File not found: {pdf_path}"
-            sPrint(error_msg)
+        if not os.path.exists(pdf_path) or not pdf_path.lower().endswith('.pdf'):
+            error_msg = f"File not found or not pdf: {pdf_path}"
             return jsonify({"success": False, "error": error_msg}), 404
             
-        if not pdf_path.lower().endswith('.pdf'):
-            error_msg = f"Not a PDF file: {pdf_path}"
-            sPrint(error_msg)
-            return jsonify({"success": False, "error": error_msg}), 400
-
-        # Create output directory
-        # base_dir = os.path.dirname(pdf_path)
-        # if out_subdir:
-        #     out_dir = os.path.join(base_dir, out_subdir)
-        # else:
-        #     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-        #     out_dir = os.path.join(base_dir, f"{base_name}_split")
-        
-        # sPrint(f"Creating output directory: {out_dir}")
-        # Path(out_dir).mkdir(parents=True, exist_ok=True)
-
         # Extract markers and get split points
-        sPrint("Extracting markers...")
         markers = extract_markers(pdf_path, app.localcfg['sourcepath'])
-        
-        if not markers:
-            error_msg = "No markers found in the PDF."
-            sPrint(error_msg)
-            return jsonify({
-                "success": False,
-                "error": error_msg
-            }), 400
-            
-        sPrint(f"Found {len(markers)} markers: {markers}")
-        
-        # Get the page numbers where we should split
-        split_starts = sorted(set([b['page'] for b in markers]))
-        sPrint(f"Split points: {split_starts}")
+        sPrint(f"Split points: {markers}")
         
         # Perform the split
-        sPrint("Starting PDF split operation...")
-        outputs = split_pdf_by_pages(app.localcfg['sourcepath'], filename, split_starts)
-        sPrint(f"PDF split completed. Created {len(outputs)} output files.")
+        outputs = split_pdf_by_pages(app.localcfg['sourcepath'], filename, markers)
+
+        if outputs > 0:
+            message = f"PDF split completed. Created {outputs} output files."
+            toast_type = "success"
+        else:
+            message = "There were no pages to write."
+            toast_type = "warning"
 
         return jsonify({
             "success": True,
-            "outputs": [
-                {"path": p, "range": {"start": r[0], "end": r[1]}} for (p, r) in outputs
-            ],
-            "markers": markers,
-            "split_starts": split_starts,
-            "out_dir": pdf_path,
-            "message": f"Successfully split PDF into {len(outputs)} files"
+            "sourcefile": filename,
+            "splitcount": outputs,
+            "message": f"Successfully split PDF into {outputs} files",
+            "toast": {
+                "message": message,
+                "type": toast_type
+            }
         })
 
     except Exception as exc:
