@@ -303,7 +303,7 @@ def split_pdf_by_pages(pathonly: str, filename: str, split_starts: List[int]) ->
         next_set = [1 + split_starts[idx], split_starts[idx+1] -1]
 
         # only if there are pages to write
-        if next_set[1] - next_set[0] > 0:
+        if next_set[1] - next_set[0] >= 0:
             outpath = os.path.join(pathonly, f"split_{timestamp}_part{idx:03d}.pdf")
             writer = PdfWriter()
 

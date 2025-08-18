@@ -592,6 +592,8 @@ function showToast(message, type = 'info') {
 
 // Split PDF by markers
 function splitPdfByMarkers(pdfPath) {
+    document.getElementById("progress").innerHTML = "Please wait.";
+
     const filename = pdfPath.split('/').pop();
     
     // Show loading state

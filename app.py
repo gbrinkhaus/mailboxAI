@@ -798,7 +798,7 @@ def extract_markers(pdf_path, workdir):
         pagenr += 1
         pagecontents = page.extract_text()
         if len(pagecontents) < 3:
-            pagecontents = getPDFOCR(filename, workdir, pagenr)
+            pagecontents = AICore.getPDFOCR(pdf_path, app.workdir, pagenr)
         # add page as separator if it contains "NEW PAGE" and nothing else
         if pagecontents.find("NEW PAGE") != -1 and len(pagecontents) <= 10:
             retarray.append(pagenr)
