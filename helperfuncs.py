@@ -1,4 +1,4 @@
-import os, shutil, sqlite3, json
+import os, shutil, json
 from pathlib import Path
 import uuid    
 import dbhandler

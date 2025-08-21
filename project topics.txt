@@ -24,6 +24,9 @@ In VSCode, use:
 
 Open:
 
+- Adden von Tags in /documents hat einen Bug
+
+
 - Idee für refactor:
 	Doublette bei addTag (jinja vs. js) entfernen:
 		Erst nur call von addTag bei load

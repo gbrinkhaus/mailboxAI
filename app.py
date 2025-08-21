@@ -519,7 +519,7 @@ def deleteTagToFile():
 @app.route('/addTagToFile', methods=('GET', 'POST'))
 def addTagToFile():
     if request.method == 'POST':
-        id = request.get_json()['id']
+        id = int(request.get_json()['id'])
         text = request.get_json()['tag']
         label = request.get_json()['label']
 
