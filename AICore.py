@@ -61,18 +61,53 @@ def getPDFOCR(filename, workdir, pagenr):
 
 
 # Find fingerprint of best matching document ******************
-def getPDFContents(filename, workdir):
-    reader = PdfReader(filename)
-    retstr = ""
+def getPDFContents(filename, workdir, password=None):
+    """
+    Extract text from PDF. If the PDF is encrypted, attempt decryption using
+    the provided password. If no password is provided and the PDF is encrypted,
+    raise a ValueError('encrypted').
 
+    Returns the extracted text (possibly via OCR fallback).
+    """
+    try:
+        reader = PdfReader(filename)
+    except Exception as e:
+        raise
+
+    # Handle encrypted PDFs
+    if hasattr(reader, 'is_encrypted') and reader.is_encrypted:
+        # If a password is provided, try to decrypt
+        if password:
+            try:
+                # PyPDF2: decrypt returns 0 if failed, 1 if success
+                decrypted = False
+                try:
+                    res = reader.decrypt(password)
+                    decrypted = (res == 1 or res == True)
+                except TypeError:
+                    # Some PyPDF2 versions return int, others bool
+                    decrypted = bool(reader.decrypt(password))
+
+                if not decrypted:
+                    raise ValueError('bad_password')
+            except Exception:
+                raise ValueError('bad_password')
+        else:
+            # Signal to caller that a password is required
+            raise ValueError('encrypted')
+
+    retstr = ""
     for page in reader.pages:
-         retstr += page.extract_text() + "\n\n"
+        # Some pages may return None from extract_text()
+        txt = page.extract_text()
+        if txt:
+            retstr += txt + "\n\n"
     npages = len(reader.pages)
 
     # if file has no contents (newline=2chars), create via OCR
     if len(retstr) < npages * 3:
         retstr = ""
-        for pagenr in range(1, npages+1 ):
+        for pagenr in range(1, npages+1 ): 
             retstr += getPDFOCR(filename, workdir, pagenr)
 
     return retstr

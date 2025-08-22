@@ -47,6 +47,18 @@ $(document).ready(function() {
         showToast(message, type);
         sessionStorage.removeItem('pendingToast');
     }
+
+    // Wire reloadFilePicker button (keeps template script-free)
+    try {
+        var reloadBtn = document.getElementById('reloadFilePicker');
+        if(reloadBtn) {
+            reloadBtn.addEventListener('click', function() {
+                reloadBtn.disabled = true;
+                reloadBtn.innerText = 'Reloading...';
+                window.location.reload();
+            });
+        }
+    } catch(e) { console.log('reloadFilePicker wiring error', e); }
 });
 
 

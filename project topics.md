@@ -1,31 +1,4 @@
-Installation:
-
-
-
-- install brew
-
-- install python 3.12.0 with pyenv, not pip
-- Use py3.12.0 for spacy not to freeze
-
-- pip install pycryptodome
-- install waitress separately
-- install tesseract, add to path
-- install pytesseract
-
-- install poppler separately
-		brew install poppler
-
-- Make sure to have right languages installed:
-	brew install tesseract-lang
-
-In VSCode, use:
-	- SQLite3 Editor
-
-
-Open:
-
-- Adden von Tags in /documents hat einen Bug
-
+# Open:
 
 - Idee für refactor:
 	Doublette bei addTag (jinja vs. js) entfernen:
@@ -68,7 +41,9 @@ Open:
 
 - Save docs to zip (backup)
 
-Done:
+# Done:
+
+- Adden von Tags in /documents hat einen Bug
 
 - Denkfehler: db im local pfad
 
@@ -83,9 +58,32 @@ Done:
 - Arrays alignen
 
 
+# Installation notes:
+
+- install brew
+
+- install python 3.12.0 with pyenv, not pip
+- Use py3.12.0 for spacy not to freeze
+
+- pip install pycryptodome
+- install waitress separately
+- install tesseract, add to path
+- install pytesseract
+
+- install poppler separately
+		brew install poppler
+
+- Make sure to have right languages installed:
+	brew install tesseract-lang
+
+In VSCode, use:
+	- SQLite3 Editor
 
 
-Should I try xattr?
+
+# Ideas:
+
+## Should I try xattr?
 
 >>> 
 import xattr

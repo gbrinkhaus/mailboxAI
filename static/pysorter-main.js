@@ -104,27 +104,37 @@ function openLocation(loc, fullpath) {
 // To call OCR in Flask mopther app *************************************
 // copyFile says whether the file is already in the document tree (=false, do not copy)
 function callOCR(caller, copyFile = true) {
-    
     document.getElementById("progress").innerHTML = "Please wait.";
 
-    // console.log(caller);
+    const payload = { 'filename': caller, 'copy': copyFile };
 
-    $.ajax({
-        url: '/',
-        type: 'POST',
-        contentType: "application/json",
-        dataType: 'json',
-        data: JSON.stringify( {'filename': caller, 'copy': copyFile} ),
-        success: function(response) {
-            console.log("OCR success");
-            // if copyfile, this means that we are coming from the home page 
-            if(copyFile) 
-                location.reload(); 
-            }, 
-        error: function (error) { 
-            console.log("OCR error");
-            console.log(error); }
+    function sendRequest(withPassword) {
+        if (withPassword) payload.password = withPassword;
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            contentType: "application/json",
+            dataType: 'json',
+            data: JSON.stringify(payload),
+            success: function(response) {
+                console.log("OCR response", response);
+                // response is expected to be JSON; server returns {password_required:true} when needed
+                if (response && response.password_required) {
+                    // show password modal
+                    showPdfPasswordModal(caller, copyFile, response.bad_password === true);
+                    return;
+                }
+                // if copyfile, this means that we are coming from the home page
+                if (copyFile) location.reload();
+            },
+            error: function (error) {
+                console.log("OCR error", error);
+            }
         });
+    }
+
+    // initial request without password
+    sendRequest(null);
 
     // if !copyfile, this means that we are redirecting to the home page 
     if(!copyFile) {
@@ -248,3 +258,62 @@ function closeApp() {
 /* To send Flask get request, not needed right now *************************************
 $(function() { $("#mybutton").click(function (event) 
 { $.getJSON('/addLevel', { }, function(data) { }); return false; }); }); */
+
+// PDF password prompt flow
+function showPdfPasswordModal(filename, copyFile, badPassword) {
+    const modalEl = document.getElementById('pdfPasswordModal');
+    if (!modalEl) {
+        alert('This PDF is password protected.');
+        return;
+    }
+    const pwInput = document.getElementById('pdfPasswordInput');
+    const pwError = document.getElementById('pdfPasswordError');
+    const submitBtn = document.getElementById('pdfPasswordSubmit');
+
+    if (badPassword) {
+        pwError.hidden = false;
+    } else {
+        pwError.hidden = true;
+    }
+    pwInput.value = '';
+
+    // show modal using bootstrap if available
+    let bsModal = null;
+    if (window.bootstrap && bootstrap.Modal) {
+        bsModal = new bootstrap.Modal(modalEl);
+        bsModal.show();
+    } else {
+        modalEl.style.display = 'block';
+    }
+
+    const cleanup = () => {
+        submitBtn.onclick = null;
+        if (bsModal) bsModal.hide(); else modalEl.style.display = 'none';
+    };
+
+    submitBtn.onclick = function() {
+        const pw = pwInput.value || null;
+        // resend OCR with password
+        document.getElementById("progress").innerHTML = "Please wait.";
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            contentType: "application/json",
+            dataType: 'json',
+            data: JSON.stringify({ 'filename': filename, 'copy': copyFile, 'password': pw }),
+            success: function(response) {
+                if (response && response.password_required) {
+                    // still requires password -> show error
+                    showPdfPasswordModal(filename, copyFile, true);
+                    return;
+                }
+                // success -> reload
+                cleanup();
+                if (copyFile) location.reload();
+            },
+            error: function(err) {
+                console.log('Error sending password', err);
+            }
+        });
+    };
+}

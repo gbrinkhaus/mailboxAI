@@ -117,10 +117,31 @@ def index():
             shutil.copyfile(app.fullpathplusname, app.workdir + app.currentfile)
             filename = app.workdir + app.currentfile
 
-            # extract the pdf contents
+            # check if client supplied a password
+            pw = None
+            try:
+                body = request.get_json()
+                if isinstance(body, dict) and 'password' in body:
+                    pw = body.get('password')
+            except Exception:
+                pw = None
+
+            # try to get the PDF contents
+            try:
+                app.filecontents = AICore.getPDFContents(filename, app.workdir, pw)
+            except ValueError as ve:
+                # Signal to the client that a password is required or invalid
+                msg = str(ve)
+                if msg == 'encrypted':
+                    return json.dumps({'success':False, 'password_required':True}), 200, {'ContentType':'application/json'}
+                elif msg == 'bad_password':
+                    return json.dumps({'success':False, 'password_required':True, 'bad_password':True}), 200, {'ContentType':'application/json'}
+                else:
+                    raise
+            
+            # extract the pdf contents (may require PDF password)
             AICore.write_PDFpreview(filename, app.prevfile)
-            app.filecontents = AICore.getPDFContents(filename, app.workdir)
-                
+                          
             # app.storedtags are those currently stored in the Database
             # app.recognizedtags are the tags that were recognized for this pdf
             # app.confirmedtags are the tags that are proposed by the file matching

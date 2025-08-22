@@ -429,6 +429,22 @@
       accum = (accum === '/' ? '' : accum) + '/' + part;
       currentLi = nextLi;
     }
+    // Ensure the final selected node is expanded and its visible subfolders loaded
+    if (currentLi) {
+      try {
+        await expandTreeItem(currentLi, accum, false, null);
+      } catch (_) {}
+      const childrenUl = currentLi.querySelector(':scope > ul');
+      if (childrenUl) {
+        childrenUl.style.display = '';
+        const toggle = currentLi.querySelector('div > button.btn-link');
+        const caret = toggle ? toggle.querySelector('i') : null;
+        if (caret) caret.className = 'fas fa-caret-down';
+        const iconEl = currentLi.querySelector(':scope > .d-flex .fas.fa-regular');
+        if (iconEl) iconEl.textContent = '\uf07c';
+      }
+    }
+
     await selectPath(normalized);
   }
 
