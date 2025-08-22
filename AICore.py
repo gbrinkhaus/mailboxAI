@@ -1,21 +1,22 @@
 from PIL import Image
 import pytesseract
 from pdf2image import convert_from_path
-from PyPDF2 import PdfReader
-import fitz
+import pymupdf as fitz
 import numpy
 import json
 from helperfuncs import *
+import os
 
 
-def write_PDFpreview(filename, prevfile):
-    # Import pdf file + write to preview  
-    pages = convert_from_path(filename, dpi=100, fmt="jpeg", last_page=1)  
+def write_PDFpreview(filename, prevfile, password=None):
+    # Import pdf file + write to preview
+    # Pass password to pdf2image if provided
+    pages = convert_from_path(filename, dpi=100, fmt="jpeg", last_page=1, userpw=password)  
     pages[0].save(prevfile, 'JPEG')  
     return
 
 
-def getPDFOCR(filename, workdir, pagenr):
+def getPDFOCR(filename, workdir, pagenr, password=None):
     # Pt.1: Import pdf file  
 #    pages = convert_from_path(filename, dpi=150, output_folder=workdir, fmt="jpeg", 
 #        jpegopt={'quality':90,'progressive':False,'optimize':False})  
@@ -25,7 +26,8 @@ def getPDFOCR(filename, workdir, pagenr):
 #    page = convert_from_path(filename, dpi=200, fmt="jpeg", grayscale=True, first_page=pagenr, last_page=pagenr, 
 #        jpegopt={'quality':90,'progressive':False,'optimize':True})[0]  
 
-    page = convert_from_path(filename, dpi=200, output_folder=workdir, fmt="ppm", grayscale=True, first_page=pagenr, last_page=pagenr)[0]  
+    # Pass password through to pdf2image (userpw)
+    page = convert_from_path(filename, dpi=200, output_folder=workdir, fmt="ppm", grayscale=True, first_page=pagenr, last_page=pagenr, userpw=password)[0]  
 
     # Old: Iterate through all the pages to store them as JPEG files  
     # for page in pages:  
@@ -64,52 +66,95 @@ def getPDFOCR(filename, workdir, pagenr):
 # Find fingerprint of best matching document ******************
 def getPDFContents(filename, workdir, password=None):
     """
-    Extract text from PDF. If the PDF is encrypted, attempt decryption using
-    the provided password. If no password is provided and the PDF is encrypted,
-    raise a ValueError('encrypted').
+    Use PyMuPDF to open the PDF (supports passwords), extract text and
+    fall back to rendering pages + OCR when text extraction yields too little.
 
-    Returns the extracted text (possibly via OCR fallback).
+    Raises ValueError('encrypted') when a password is required but not given,
+    and ValueError('bad_password') when a supplied password is incorrect.
     """
     try:
-        reader = PdfReader(filename)
-    except Exception as e:
-        raise
-
-    # Handle encrypted PDFs
-    if hasattr(reader, 'is_encrypted') and reader.is_encrypted:
-        # If a password is provided, try to decrypt
-        if password:
+        doc = fitz.open(filename)
+    except RuntimeError as e:
+        msg = str(e).lower()
+        # If the error message indicates encryption, try a password-aware open or raise encrypted
+        if 'password' in msg or 'encrypted' in msg or 'password required' in msg:
+            if not password:
+                raise ValueError('encrypted')
+            # Try opening via stream with password (some PyMuPDF builds require this)
             try:
-                # PyPDF2: decrypt returns 0 if failed, 1 if success
-                decrypted = False
-                try:
-                    res = reader.decrypt(password)
-                    decrypted = (res == 1 or res == True)
-                except TypeError:
-                    # Some PyPDF2 versions return int, others bool
-                    decrypted = bool(reader.decrypt(password))
-
-                if not decrypted:
-                    raise ValueError('bad_password')
-            except Exception:
+                with open(filename, 'rb') as fh:
+                    data = fh.read()
+                doc = fitz.open(stream=data, filetype='pdf', password=password)
+            except RuntimeError:
+                # password didn't work
                 raise ValueError('bad_password')
+            except Exception:
+                raise
         else:
-            # Signal to caller that a password is required
+            raise
+
+    # If document requires a password
+    try:
+        needs_pass = getattr(doc, 'needs_pass', False)
+    except Exception:
+        needs_pass = False
+
+    if needs_pass:
+        if not password:
+            try:
+                doc.close()
+            except Exception:
+                pass
             raise ValueError('encrypted')
+        # authenticate returns True on success
+        ok = False
+        try:
+            ok = doc.authenticate(password)
+        except Exception:
+            ok = False
+        if not ok:
+            try:
+                doc.close()
+            except Exception:
+                pass
+            raise ValueError('bad_password')
 
+    # Extract text from all pages
     retstr = ""
-    for page in reader.pages:
-        # Some pages may return None from extract_text()
-        txt = page.extract_text()
-        if txt:
-            retstr += txt + "\n\n"
-    npages = len(reader.pages)
+    npages = doc.page_count
+    for pno in range(npages):
+        try:
+            page = doc.load_page(pno)
+            txt = page.get_text("text")
+            if txt:
+                retstr += txt + "\n\n"
+        except Exception:
+            # skip page on error
+            continue
 
-    # if file has no contents (newline=2chars), create via OCR
-    if len(retstr) < npages * 3:
+    # If extracted text too small, render pages and run OCR
+    if len(retstr) < max(1, npages * 3):
         retstr = ""
-        for pagenr in range(1, npages+1 ): 
-            retstr += getPDFOCR(filename, workdir, pagenr)
+        for pno in range(npages):
+            try:
+                page = doc.load_page(pno)
+                # render at ~200 dpi
+                mat = fitz.Matrix(200.0 / 72.0, 200.0 / 72.0)
+                pix = page.get_pixmap(matrix=mat)
+                exportfile = os.path.join(workdir, f"Page_no_{pno+1}.ppm")
+                pix.save(exportfile)
+
+                pilimge = Image.open(exportfile)
+                tess = pytesseract.image_to_string(pilimge, lang="deu")
+                retstr += str(tess).replace('-\n', '') + "\n\n"
+            except Exception:
+                # If rendering or OCR fails, continue to next page
+                continue
+
+    try:
+        doc.close()
+    except Exception:
+        pass
 
     return retstr
 

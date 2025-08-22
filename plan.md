@@ -10,10 +10,11 @@
 ## Task List
 - [x] Identify all usages of PyPDF2 in the codebase
 - [x] Document the specific features and methods used from PyPDF2
-- [ ] Research alternative libraries that provide equivalent functionality
-- [ ] Compare alternatives and assess migration complexity
-- [ ] Recommend whether and how to replace PyPDF2
-- [ ] Update pip requirements and imports to use pypdf
+- [x] Replace runtime usage with PyMuPDF and remove PyPDF2 from requirements
+- [ ] Research alternative libraries that provide equivalent functionality (optional)
+- [ ] Compare alternatives and assess migration complexity (optional)
+- [ ] Recommend whether and how to replace PyPDF2 (optional)
+- [ ] Update documentation and README to reflect the change
 
 ## Current Goal
 Research alternatives and assess migration complexity

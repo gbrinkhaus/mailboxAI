@@ -18,6 +18,7 @@ from PIL import Image
 
 import spacy
 import de_core_news_md
+import pymupdf as fitz
 
 import AICore
 from helperfuncs import *
@@ -82,7 +83,12 @@ def index():
     # when POST, execute OCR on a chosen file ************************
     else:
         resetApp(app)
-        callstr = request.get_json()['filename']
+        # Read JSON body once (silent=True avoids errors when content-type is missing)
+        try:
+            data = request.get_json(silent=True) or {}
+        except Exception:
+            data = {}
+        callstr = data.get('filename', '')
 
         if callstr != '':
             app.fullfilename = callstr
@@ -117,14 +123,11 @@ def index():
             shutil.copyfile(app.fullpathplusname, app.workdir + app.currentfile)
             filename = app.workdir + app.currentfile
 
-            # check if client supplied a password
-            pw = None
-            try:
-                body = request.get_json()
-                if isinstance(body, dict) and 'password' in body:
-                    pw = body.get('password')
-            except Exception:
-                pw = None
+            # check if client supplied a password in the same JSON body
+            pw = data.get('password', None)
+            if pw is not None:
+                # store current password on the app object for later calls (e.g., OCR/marker extraction)
+                app.current_password = pw
 
             # try to get the PDF contents
             try:
@@ -140,7 +143,7 @@ def index():
                     raise
             
             # extract the pdf contents (may require PDF password)
-            AICore.write_PDFpreview(filename, app.prevfile)
+            AICore.write_PDFpreview(filename, app.prevfile, pw)
                           
             # app.storedtags are those currently stored in the Database
             # app.recognizedtags are the tags that were recognized for this pdf
@@ -811,18 +814,21 @@ for x in range(len(thearray)):
 """
 
 def extract_markers(pdf_path, workdir):
-    reader = PdfReader(pdf_path)
+    doc = fitz.open(pdf_path)
     retarray = []
-    pagenr = 0
 
-    for page in reader.pages:
-        pagenr += 1
-        pagecontents = page.extract_text()
+    for idx, page in enumerate(doc, start=1):
+        pagecontents = page.get_text("text") or ""
         if len(pagecontents) < 3:
-            pagecontents = AICore.getPDFOCR(pdf_path, app.workdir, pagenr)
+            pagecontents = AICore.getPDFOCR(pdf_path, app.workdir, idx, getattr(app, 'current_password', None))
         # add page as separator if it contains "NEW PAGE" and nothing else
-        if pagecontents.find("NEW PAGE") != -1 and len(pagecontents) <= 10:
-            retarray.append(pagenr)
+        if "NEW PAGE" in pagecontents and len(pagecontents) <= 10:
+            retarray.append(idx)
+
+    try:
+        doc.close()
+    except Exception:
+        pass
 
     return retarray
     

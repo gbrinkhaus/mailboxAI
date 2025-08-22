@@ -274,7 +274,7 @@ from typing import List, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 from pdf2image import convert_from_path
-from PyPDF2 import PdfReader, PdfWriter
+import pymupdf as fitz
 
 def split_pdf_by_pages(pathonly: str, filename: str, split_starts: List[int]) -> int:
     """Split a PDF given start indices. Returns list of (filepath, (start,end)) ranges.
@@ -286,35 +286,46 @@ def split_pdf_by_pages(pathonly: str, filename: str, split_starts: List[int]) ->
     timestamp = datetime.now().strftime("%d%m%y-%H.%M.%S")
 
     pdf_path = os.path.join(pathonly, filename)
-    reader = PdfReader(pdf_path)
-    n = len(reader.pages)
+    doc = fitz.open(pdf_path)
+    n = doc.page_count
 
     # first page must be a "virtual" delimiter
-    if not 0 in split_starts:
-        split_starts.append(0) 
+    if 0 not in split_starts:
+        split_starts.append(0)
 
     # if last page is not a delimiter, add one at the end
-    if not n in split_starts:
-        split_starts.append(n+1)
+    if n not in split_starts:
+        # keep compatibility with original logic which used n+1 sentinel
+        split_starts.append(n + 1)
+
     split_starts = sorted(split_starts)
 
     success_count = 0
-    for idx in range(len(split_starts) -1):
-        next_set = [1 + split_starts[idx], split_starts[idx+1] -1]
+    for idx in range(len(split_starts) - 1):
+        # original logic used 1-based page numbers in the output ranges
+        start_page_num = 1 + split_starts[idx]
+        end_page_num = split_starts[idx + 1] - 1
 
         # only if there are pages to write
-        if next_set[1] - next_set[0] >= 0:
+        if end_page_num - start_page_num >= 0:
             outpath = os.path.join(pathonly, f"split_{timestamp}_part{idx:03d}.pdf")
-            writer = PdfWriter()
 
-            for page in range( next_set[0], next_set[1] + 1):
-                writer.add_page(reader.pages[page - 1])
+            # create a new PDF and insert the requested pages
+            new_doc = fitz.open()
+            for page_num in range(start_page_num, end_page_num + 1):
+                # convert to 0-based index
+                page_index = page_num - 1
+                # insert_pdf can copy a range; use from_page==to_page to copy a single page
+                new_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
 
-            with open(outpath, "wb") as f:
-                writer.write(f)
+            # save only if we added pages
+            if new_doc.page_count > 0:
+                new_doc.save(outpath)
+                success_count += 1
 
-            success_count += 1
+            new_doc.close()
 
+    doc.close()
     return success_count
 
 

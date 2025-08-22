@@ -289,6 +289,10 @@ function showPdfPasswordModal(filename, copyFile, badPassword) {
     const cleanup = () => {
         submitBtn.onclick = null;
         if (bsModal) bsModal.hide(); else modalEl.style.display = 'none';
+        // clear any progress message and re-enable UI
+        try {
+            document.getElementById("progress").innerHTML = "";
+        } catch(e) {}
     };
 
     submitBtn.onclick = function() {
@@ -316,4 +320,19 @@ function showPdfPasswordModal(filename, copyFile, badPassword) {
             }
         });
     };
+
+    // wire the cancel/close buttons to cleanup so the page is not left grayed out
+    try {
+        const cancelBtn = modalEl.querySelector('.modal-footer .btn-secondary[data-bs-dismiss]');
+        if (cancelBtn) {
+            cancelBtn.onclick = function() { cleanup(); };
+        }
+        // if bootstrap is available, also ensure cleanup runs when the modal is hidden
+        if (bsModal && bsModal._element) {
+            modalEl.addEventListener('hidden.bs.modal', function () { cleanup(); });
+        } else {
+            // fallback: observe DOM changes to detect hide
+            modalEl.addEventListener('transitionend', function() { if (modalEl.style.display === 'none') cleanup(); });
+        }
+    } catch(e) { /* non-fatal */ }
 }
