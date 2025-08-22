@@ -167,7 +167,9 @@ def index():
             # AICore candidate: do NER on recognized text and double check the results *******************
             nlp = de_core_news_md.load()
             doc = nlp(app.filecontents)
-            for ent in doc.ents:
+            # Filter noisy NER results before validating
+            filtered = AICore.filter_ner_entities(doc.ents, text=app.filecontents, allow_labels=['PER','ORG','LOC','MISC'])
+            for ent in filtered:
                 a = checkEnt(ent)
                 if a:
                     matches = safeFind(a['text'], app.filecontents)

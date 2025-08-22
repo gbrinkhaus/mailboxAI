@@ -6,6 +6,9 @@ import numpy
 import json
 from helperfuncs import *
 import os
+import re
+import string
+from types import SimpleNamespace
 
 
 def write_PDFpreview(filename, prevfile, password=None):
@@ -236,6 +239,144 @@ def getBestTagMatch(foundtags, app):
             sPrint(f"New best match found for file {file_id} with similarity {similarity}")
     
     return best_match
+
+
+def filter_ner_entities(ents, text=None, min_len=3, max_len=80, allow_labels=None):
+    """
+    Filter spaCy NER entities to reduce noisy / non-usable candidates.
+
+    Parameters:
+      ents: iterable of spaCy Span objects (must have .label_ and .text)
+      text: the full document text (optional) used for simple frequency checks
+      min_len, max_len: length limits on entity text
+      allow_labels: optional set/list of labels to keep (e.g., {'PER','ORG','LOC','MISC'})
+
+    Returns: list of SimpleNamespace objects with attributes .label_ and .text
+
+    Heuristics applied:
+      - length and character checks
+      - reject entities containing pipes or excessive punctuation
+      - reject entities that are mostly digits or look like dates/urls/emails
+      - remove unmatched brackets
+      - normalize whitespace and strip surrounding punctuation
+      - deduplicate case-insensitively
+    """
+    if allow_labels is not None:
+        allow_labels = set([l.upper() for l in allow_labels])
+
+    seen = set()
+    out = []
+
+    puncre = re.compile(r'[{}]'.format(re.escape(string.punctuation)))
+    date_re = re.compile(r'\b\d{1,2}[\.\-/]\d{1,2}[\.\-/]\d{2,4}\b')
+    url_re = re.compile(r'https?://|www\.|@')
+    # currency / amount tokens (EUR A 2,00/20 etc.)
+    currency_re = re.compile(r'\b(EUR|USD|GBP|CHF|JPY|AUD|CAD)\b', re.I)
+    amt_re = re.compile(r'\d+[\.,]\d{1,3}')
+    # identifier-like tokens: long uppercase+digits without spaces (e.g. SWIFT/BIC)
+    id_like_re = re.compile(r'^[A-Z0-9_\-]{8,}$')
+    # long digit sequences (bank ids, account numbers)
+    digit_seq_re = re.compile(r'\d{10,}')
+    # repeated character runs (e.g. ÜÜÜÜ)
+    repeat_re = re.compile(r'(.)\1{3,}')
+
+    for ent in ents:
+        try:
+            label = getattr(ent, 'label_', None) or (ent[0] if isinstance(ent, (list,tuple)) else None)
+            etxt = getattr(ent, 'text', None) or (ent[1] if isinstance(ent, (list,tuple)) else None)
+            if label is None or etxt is None:
+                continue
+            label = str(label).strip()
+            s = str(etxt).strip()
+        except Exception:
+            continue
+
+        # normalize whitespace
+        s = re.sub(r'\s+', ' ', s).strip()
+        # strip surrounding punctuation
+        s = s.strip(string.punctuation + "\u201c\u201d\u2018\u2019")
+
+        if not s:
+            continue
+        if len(s) < min_len or len(s) > max_len:
+            continue
+
+        # optional label filter
+        if allow_labels and label.upper() not in allow_labels:
+            continue
+
+        low = s.lower()
+        key = (label.upper(), low)
+        if key in seen:
+            continue
+
+        # reject if contains pipe or control chars
+        if '|' in s or '\x00' in s or '\x1f' in s:
+            continue
+
+        # reject urls, emails, or strings with @
+        if url_re.search(s):
+            continue
+
+        # reject mostly digits or obvious dates
+        digits = sum(ch.isdigit() for ch in s)
+        if digits / max(1, len(s)) > 0.6:
+            continue
+        if date_re.search(s):
+            continue
+
+        # reject currency-like tokens (EUR followed by amounts or similar)
+        if currency_re.search(s) and (amt_re.search(s) or any(ch.isdigit() for ch in s)):
+            continue
+
+        # reject identifier-like tokens (long uppercase/digit sequences)
+        # remove common separators first (including underscore)
+        compact = s.replace(' ', '').replace('.', '').replace('-', '').replace('_', '')
+        if id_like_re.match(compact):
+            continue
+
+        # reject if contains a long contiguous digit sequence (likely an ID/account)
+        if digit_seq_re.search(s):
+            continue
+
+        # reject tokens with excessive repeated characters (e.g. LLÜÜÜUÜI)
+        if repeat_re.search(s):
+            continue
+
+        # reject tokens with low letter density (mostly symbols/digits)
+        letters = sum(1 for ch in s if ch.isalpha())
+        if len(s) > 0 and (letters / len(s)) < 0.35:
+            # allow short exceptions, but remove long non-word tokens
+            if len(s) > 4:
+                continue
+
+        # punctuation density
+        pcount = len(puncre.findall(s))
+        if pcount / max(1, len(s)) > 0.25:
+            continue
+
+        # unmatched brackets
+        for a, b in [('(',')'), ('[',']'), ('{','}')]:
+            if (s.count(a) > 0) != (s.count(b) > 0):
+                # unmatched - strip brackets and re-evaluate
+                s = s.replace(a, '').replace(b, '')
+                s = s.strip()
+                if not s:
+                    # if nothing left after removing unmatched brackets, skip
+                    continue
+
+        # Simple frequency check: if text provided, require the entity appears in text
+        if text is not None:
+            if low not in text.lower():
+                # allow short exceptions (single word proper nouns), but otherwise skip
+                if len(s.split()) > 1:
+                    continue
+
+        # Passed all filters
+        seen.add(key)
+        out.append(SimpleNamespace(label_=label, text=s))
+
+    return out
 
 
 
