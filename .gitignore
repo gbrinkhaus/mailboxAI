@@ -11,3 +11,13 @@ appcache/
 __pycache__/
 
 **/preview.jpg
+
+# Temporary smoke-test outputs
+scripts/tmp_smoke/
+
+# Local virtualenv
+.venv/
+
+# macOS and IDE
+.vscode/
+.idea/
