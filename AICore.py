@@ -379,6 +379,104 @@ def filter_ner_entities(ents, text=None, min_len=3, max_len=80, allow_labels=Non
     return out
 
 
+def findDatesInText(text):
+    """
+    Extract dates from text (German/English). Returns list of ["DATE", "DD.MM.YYYY"]
+    Month-only matches (e.g. "September 2024" or "im September 2024") are normalized
+    to the first day of that month (01.MM.YYYY).
+    """
+    retarray = []
+    if not text:
+        return retarray
+
+    months = {
+        'jan': 1, 'january': 1, 'januar': 1,
+        'feb': 2, 'february': 2, 'februar': 2,
+        'mar': 3, 'marc': 3, 'march': 3, 'mär': 3, 'märz': 3, 'maerz': 3, 'marz': 3,
+        'apr': 4, 'april': 4,
+        'may': 5, 'mai': 5,
+        'jun': 6, 'june': 6, 'juni': 6,
+        'jul': 7, 'july': 7, 'juli': 7,
+        'aug': 8, 'august': 8,
+        'sep': 9, 'sept': 9, 'september': 9,
+        'oct': 10, 'okt': 10, 'october': 10, 'oktober': 10,
+        'nov': 11, 'november': 11,
+        'dec': 12, 'dez': 12, 'december': 12, 'dezember': 12
+    }
+
+    found = set()
+
+    def _year_to_4(y: str) -> str:
+        y = y.strip()
+        if len(y) == 2:
+            return '20' + y
+        return y
+
+    for m in re.finditer(r"\b(\d{1,2})[\.\-/](\d{1,2})[\.\-/](\d{2,4})\b", text):
+        d, mon, y = m.groups()
+        y = _year_to_4(y)
+        try:
+            di = int(d); mo = int(mon); yi = int(y)
+            if 1 <= di <= 31 and 1 <= mo <= 12:
+                found.add(f"{di:02d}.{mo:02d}.{yi:04d}")
+        except Exception:
+            pass
+
+    for m in re.finditer(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", text):
+        y, mon, d = m.groups()
+        try:
+            di = int(d); mo = int(mon); yi = int(y)
+            if 1 <= di <= 31 and 1 <= mo <= 12:
+                found.add(f"{di:02d}.{mo:02d}.{yi:04d}")
+        except Exception:
+            pass
+
+    month_alt = r"(" + r"|".join(sorted({re.escape(k) for k in months.keys()}, key=len, reverse=True)) + r")"
+
+    dm_regex = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?" + month_alt + r"\,?\s+(\d{4})\b", re.I)
+    for m in dm_regex.finditer(text):
+        d, monname, y = m.groups()
+        y = _year_to_4(y)
+        monnum = months.get(monname.lower().rstrip('.'), None)
+        if monnum:
+            try:
+                di = int(d); yi = int(y)
+                if 1 <= di <= 31:
+                    found.add(f"{di:02d}.{monnum:02d}.{yi:04d}")
+            except Exception:
+                pass
+
+    mdy_regex = re.compile(r"\b" + month_alt + r"\.?\s+(\d{1,2})(?:st|nd|rd|th)?\,?\s+(\d{4})\b", re.I)
+    for m in mdy_regex.finditer(text):
+        monname, d, y = m.groups()
+        y = _year_to_4(y)
+        monnum = months.get(monname.lower().rstrip('.'), None)
+        if monnum:
+            try:
+                di = int(d); yi = int(y)
+                if 1 <= di <= 31:
+                    found.add(f"{di:02d}.{monnum:02d}.{yi:04d}")
+            except Exception:
+                pass
+
+    my_regex = re.compile(r"\b(?:im\s+|in\s+)?" + month_alt + r"\.?\s+(\d{4})\b", re.I)
+    for m in my_regex.finditer(text):
+        monname, y = m.groups()
+        y = _year_to_4(y)
+        monnum = months.get(monname.lower().rstrip('.'), None)
+        if monnum:
+            try:
+                yi = int(y)
+                found.add(f"01.{monnum:02d}.{yi:04d}")
+            except Exception:
+                pass
+
+    for date in sorted(found):
+        retarray.append(["DATE", date])
+
+    return retarray
+
+
 
 ''' Tried to fix image because of constant troubles with jpeg - to no avail - ppm does work
 

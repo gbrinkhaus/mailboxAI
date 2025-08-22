@@ -154,6 +154,67 @@ def index():
             dates = findDatesInText(app.filecontents)
             app.datetags += dates
 
+            # Prefill the date field with the most probable date (invoice/document date)
+            try:
+                if dates:
+                    from datetime import datetime
+                    now = datetime.now()
+                    # keywords that indicate a nearby date likely refers to document/invoice date
+                    key_keywords = ['rechnung', 'rechnungsdatum', 'invoice', 'invoice date', 'datum', 'issued', 'ausgestellt', 'date']
+
+                    scores = {}
+                    for _label, dstr in dates:
+                        scores.setdefault(dstr, {'freq':0, 'kw':0, 'recency':0.0})
+
+                    # frequency count
+                    for dstr in list(scores.keys()):
+                        try:
+                            freq = len(safeFind(dstr, app.filecontents))
+                        except Exception:
+                            freq = 0
+                        scores[dstr]['freq'] = freq
+
+                    # keyword proximity: look for keywords within +/-50 chars of each occurrence
+                    for dstr in list(scores.keys()):
+                        kwcount = 0
+                        try:
+                            occs = safeFind(dstr, app.filecontents)
+                        except Exception:
+                            occs = []
+                        for idx in occs:
+                            start = max(0, idx - 50)
+                            end = min(len(app.filecontents), idx + len(dstr) + 50)
+                            window = app.filecontents[start:end].lower()
+                            for kw in key_keywords:
+                                if kw in window:
+                                    kwcount += 1
+                        scores[dstr]['kw'] = kwcount
+
+                    # recency score: prefer dates close to today
+                    for dstr in list(scores.keys()):
+                        try:
+                            dt = datetime.strptime(dstr, '%d.%m.%Y')
+                            days = abs((now - dt).days)
+                            # score inversely proportional to distance in years
+                            scores[dstr]['recency'] = 1.0 / (1.0 + (days / 365.0))
+                        except Exception:
+                            scores[dstr]['recency'] = 0.0
+
+                    # final score: weight keyword proximity highest, then freq, then recency
+                    best = None
+                    bestscore = -1
+                    for dstr, v in scores.items():
+                        score = v['kw'] * 10 + v['freq'] * 2 + v['recency']
+                        if score > bestscore:
+                            bestscore = score
+                            best = dstr
+
+                    if best:
+                        app.dateonly = best
+            except Exception:
+                # if anything goes wrong, leave app.dateonly unchanged
+                pass
+
             # AICore candidate: add all known (stored) database tags that can be found in the text
             ents = []
             for tag in app.storedtags:
@@ -510,14 +571,11 @@ def rebuildFilesTags():
 
 # Find any type of date in a text ************
 def findDatesInText(text):
-    retarray = []
-    dtarray = re.findall(r'\d{1,2}\.\d{1,2}\.\d{2,4}', text)
-    dtarray = deduplicate(dtarray, [0])
-    
-    for date in dtarray:
-        retarray.append( [ "DATE", date ] )
-
-    return retarray
+    # wrapper to AICore.findDatesInText to keep existing callers working
+    try:
+        return AICore.findDatesInText(text)
+    except Exception:
+        return []
 
 
 # Remove a tag from a file ************
