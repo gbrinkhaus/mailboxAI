@@ -1,6 +1,5 @@
 import os, shutil, sqlite3, json, re
 from pathlib import Path
-from app import getTagByID, getTagsByText, getTagByTypeAndText
 
 # =============================
 # Light-weight data access layer
@@ -697,14 +696,16 @@ class dbhandler:
         return self.f2t.insert_relation(file_id, tag_id, is_folder, occurrence_count)
 
     def addMissingFolderTags(self, app, fileid, relpath):
+        from app import getTagsByText
         for x, tag in enumerate(relpath.split("/")):
-            if(tag != ""):
+            if tag != "":
                 tagfound = getTagsByText(tag)
                 if tagfound:
                     id = tagfound[0]['id']
                     self.writeTagToFile(fileid, id, x)
 
     def addMissingDBTags(self, app, file):
+        from app import getTagByID, getTagByTypeAndText
         tagsfromDesc = []
         tagstr = re.search(r"(\[(.*?)\]\])", file['desc'])
         if tagstr:

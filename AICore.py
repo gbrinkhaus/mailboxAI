@@ -2,6 +2,7 @@ from PIL import Image
 import pytesseract
 from pdf2image import convert_from_path
 from PyPDF2 import PdfReader
+import fitz
 import numpy
 import json
 from helperfuncs import *
