@@ -477,6 +477,155 @@ def findDatesInText(text):
     return retarray
 
 
+def suggest_filename(text, date_hint=None, prefer_labels=None, maxlen=60):
+    """
+    Create a speaking filename base (without date/extension) from document text.
+
+    Strategy:
+      - Look for ORGANIZATION or PERSON-like tokens via simple heuristics (capitalized lines)
+      - Prefer lines that contain keywords like invoice, rechnung, statement
+      - Fall back to the first meaningful text line
+      - Sanitize to remove filesystem-unfriendly characters and shorten to maxlen
+
+    Returns a short string safe for use as filename (no extension).
+    """
+    if not text:
+        return "document"
+
+    txt = text.strip().replace('\r', '\n')
+
+    # try to find a headline-like line (short, contains letters, mixed case)
+    lines = [l.strip() for l in txt.split('\n') if l.strip()]
+
+    # multilingual invoice keywords -> canonical prefix
+    invoice_keywords = {
+        'rechnung': 'Rechnung',
+        'rechnungsnummer': 'Rechnung',
+        'rechnung nr': 'Rechnung',
+        'invoice': 'Invoice',
+        'invoice no': 'Invoice',
+        'statement': 'Statement',
+        'facture': 'Facture',
+        'fattura': 'Fattura',
+        'factura': 'Factura'
+    }
+
+    # helper: find first matching keyword in the whole text
+    prefix = None
+    for k in invoice_keywords:
+        if k in txt.lower():
+            prefix = invoice_keywords[k]
+            break
+
+    candidate = None
+
+    # If an invoice-like keyword exists, try to extract the company nearby
+    if prefix:
+        # look for lines that look like company names: containing GmbH, AG, Ltd, Inc, GmbH & Co, etc.
+        company_designators = ['gmbh', 'gmbh & co', 'ag', 'ltd', 'limited', 'inc', 'llc', 'kg', 'ohg', 's.a.', 'sa']
+        # search lines for company designators first
+        for l in lines:
+            low = l.lower()
+            for d in company_designators:
+                if d in low:
+                    candidate = l
+                    break
+            if candidate:
+                break
+
+        # if none, search for a nearby capitalized line (title-like)
+        if not candidate:
+            # attempt to pick a line with multiple capitalized words
+            for l in lines[:30]:
+                words = [w for w in l.split() if w]
+                if len(words) >= 1 and any(w[0].isupper() for w in words):
+                    # prefer short lines that look like names
+                    if len(words) <= 6 and any(c.isalpha() for c in l):
+                        candidate = l
+                        break
+
+        # if still none, try to pick a line immediately after a keyword occurrence
+        if not candidate:
+            lowered = txt.lower()
+            for k in invoice_keywords:
+                idx = lowered.find(k)
+                if idx != -1:
+                    # find next non-empty line after the position
+                    # compute approximate character index to line mapping
+                    chars = txt[idx:idx+200]
+                    # split subsequent text and choose first meaningful token line
+                    subs = chars.split('\n')
+                    if len(subs) > 1 and subs[1].strip():
+                        candidate = subs[1].strip()
+                        break
+
+        # if we found a company-like candidate, build base as Prefix_Company
+        if candidate:
+            # remove short date fragments or labels from candidate
+            candidate = re.sub(r"^(von|an|für|fuer)\s+", '', candidate, flags=re.I)
+            company_name = re.sub(r'[^\w\s-]', '', candidate, flags=re.U)
+            company_name = re.sub(r'\s+', '_', company_name).strip('_')
+            base = f"{prefix}_{company_name}"
+        else:
+            base = f"{prefix}_Company"
+
+        # append date later as usual
+    else:
+        # prefer lines that contain keywords (legacy behavior)
+        keywords = ['invoice', 'rechnung', 'statement', 'rechnungnr', 'rechnung nr', 'rechnung nr.', 'rechnungsnummer']
+        for l in lines:
+            low = l.lower()
+            for kw in keywords:
+                if kw in low:
+                    candidate = l
+                    break
+            if candidate:
+                break
+
+    # second pass: a short title-ish line (no more than 6 words, contains letters)
+    if not candidate:
+        for l in lines[:20]:
+            if 3 <= len(l) <= 100 and len(l.split()) <= 6 and any(c.isalpha() for c in l):
+                candidate = l
+                break
+
+    # third pass: first non-empty line
+    if not candidate and len(lines) > 0:
+        candidate = lines[0]
+
+    if not candidate:
+        candidate = "document"
+
+    # remove typical leading words like 'von', 'an', 'an:' etc and dates fragments
+    candidate = re.sub(r"^(von|an|für|fuer)\s+", '', candidate, flags=re.I)
+
+    # if date_hint provided, try to incorporate an identifier (e.g., Invoice ACME -> Invoice_ACME)
+    # build base by taking alphanumeric + spaces
+    base = re.sub(r'[^\w\s-]', '', candidate, flags=re.U)
+    base = re.sub(r'\s+', '_', base).strip('_')
+
+    if date_hint:
+        # normalise date dd.mm.yyyy -> yyyymmdd or accept already yyyymmdd
+        d = date_hint.strip()
+        m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", d)
+        if m:
+            base = f"{base}_{m.group(3)}{m.group(2)}{m.group(1)}"
+        else:
+            # if other form, just append short sanitized date
+            ds = re.sub(r'[^0-9]', '', d)
+            if ds:
+                base = f"{base}_{ds}"
+
+    # trim length
+    if len(base) > maxlen:
+        base = base[:maxlen].rstrip('_')
+
+    if not base:
+        base = "document"
+
+    return base
+
+
 
 ''' Tried to fix image because of constant troubles with jpeg - to no avail - ppm does work
 

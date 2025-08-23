@@ -394,6 +394,98 @@ def processfile():
     return redirect(url_for('index'))
 
 
+# Suggest a speaking filename (AJAX)
+@app.route('/suggest_filename', methods=['POST'])
+def suggest_filename():
+    try:
+        data = request.get_json(silent=True) or {}
+    except Exception:
+        data = {}
+
+    text = data.get('filecontents', '')
+    datehint = data.get('date', '')
+
+    suggestion = ''
+
+    # Multilingual invoice keywords mapping (must match AICore logic)
+    invoice_keywords = {
+        'rechnung': 'Rechnung',
+        'rechnungsnummer': 'Rechnung',
+        'rechnung nr': 'Rechnung',
+        'invoice': 'Invoice',
+        'invoice no': 'Invoice',
+        'statement': 'Statement',
+        'facture': 'Facture',
+        'fattura': 'Fattura',
+        'factura': 'Factura'
+    }
+
+    lowered = (text or '').lower()
+    detected_prefix = None
+    for k in invoice_keywords:
+        if k in lowered:
+            detected_prefix = invoice_keywords[k]
+            break
+
+    # If an invoice-like keyword exists, prefer extracting an ORG/PER via spaCy
+    if detected_prefix:
+        try:
+            doc = nlp(text or '')
+            ents = AICore.filter_ner_entities(doc.ents, text=text, allow_labels=['ORG', 'PER'])
+            org = None
+            # prefer ORG over PER
+            for e in ents:
+                if getattr(e, 'label_', '').upper() == 'ORG':
+                    org = e.text
+                    break
+            if not org and ents:
+                org = ents[0].text
+
+            if org:
+                org_clean = re.sub(r'[^\w\s-]', '', org, flags=re.U)
+                org_clean = re.sub(r'\s+', '_', org_clean).strip('_')
+            else:
+                org_clean = 'Company'
+
+            # Determine topic: prefer detected invoice keyword, else try noun chunks, else first line
+            topic = None
+            if detected_prefix:
+                topic = detected_prefix
+            else:
+                try:
+                    for nc in doc.noun_chunks:
+                        t = nc.text.strip()
+                        if len(t) > 2 and len(t.split()) <= 4:
+                            topic = t
+                            break
+                except Exception:
+                    topic = None
+
+            if not topic:
+                lines = [l.strip() for l in (text or '').split('\n') if l.strip()]
+                topic = lines[0] if lines else 'Document'
+
+            topic_clean = re.sub(r'[^\w\s-]', '', topic, flags=re.U)
+            topic_clean = re.sub(r'\s+', '_', topic_clean).strip('_')
+
+            base = f"{org_clean}_{topic_clean}"
+            suggestion = base
+        except Exception:
+            suggestion = ''
+
+    # fallback to AICore generator
+    if not suggestion:
+        try:
+            suggestion = AICore.suggest_filename(text, date_hint=datehint)
+        except Exception:
+            suggestion = ''
+
+    if not suggestion:
+        suggestion = 'document'
+
+    return jsonify({'suggestion': suggestion})
+
+
 # DOCS route ******************
 @app.route('/documents', methods=('GET', 'POST'))
 def documents():

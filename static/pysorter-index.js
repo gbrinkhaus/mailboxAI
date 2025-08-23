@@ -59,6 +59,35 @@ $(document).ready(function() {
             });
         }
     } catch(e) { console.log('reloadFilePicker wiring error', e); }
+
+    // If OCR results are visible, try to get a speaking filename suggestion
+    try {
+        if (!document.getElementById('ocrresults').hidden) {
+            const fnElem = document.getElementById('FN');
+            const initialFN = fnElem ? fnElem.value.trim() : '';
+            const fileContents = (document.getElementById('filecontents')) ? document.getElementById('filecontents').innerText : '';
+            const dateVal = (document.getElementById('DT')) ? document.getElementById('DT').value : '';
+
+            // Request suggestion and only overwrite if the value hasn't changed since load
+            fetch('/suggest_filename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filecontents: fileContents, date: dateVal })
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data && data.suggestion) {
+                    // sanitize a bit on client-side
+                    const safe = data.suggestion.replace(/[\\/:*?"<>|]/g, '-').trim();
+                    if (safe && fnElem && fnElem.value.trim() === initialFN) {
+                        fnElem.value = safe;
+                        checkSendButton();
+                    }
+                }
+            })
+            .catch(err => { console.log('Filename suggestion failed', err); });
+        }
+    } catch(e) { console.log('suggest_filename wiring error', e); }
 });
 
 
