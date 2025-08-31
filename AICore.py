@@ -477,6 +477,226 @@ def findDatesInText(text):
     return retarray
 
 
+def _parse_amount_value(s: str):
+    """
+    Try to parse a human-written amount string into a float (in EUR-like or US-like formats).
+    Returns float or None.
+    """
+    if not s:
+        return None
+    try:
+        t = s.strip()
+        # remove currency symbols and text
+        t = re.sub(r'[A-Za-z\s€$£¥₹¤]', '', t)
+        t = t.strip()
+        if not t:
+            return None
+
+        # if both dot and comma exist, assume last one is decimal separator
+        if '.' in t and ',' in t:
+            if t.rfind(',') > t.rfind('.'):
+                # treat comma as decimal, remove dots as thousand separators
+                t = t.replace('.', '')
+                t = t.replace(',', '.')
+            else:
+                # treat dot as decimal, remove commas
+                t = t.replace(',', '')
+
+        # if only comma present, assume it's the decimal separator
+        elif ',' in t and '.' not in t:
+            t = t.replace('.', '')
+            t = t.replace(',', '.')
+
+        # if only dots present, they might be thousand separators or decimal
+        elif '.' in t and ',' not in t:
+            parts = t.split('.')
+            # if last part length == 2, interpret as decimal
+            if len(parts[-1]) == 2:
+                t = t
+            else:
+                # remove dots as thousand separators
+                t = t.replace('.', '')
+
+        # final clean: keep digits and one dot
+        t = re.sub(r'[^0-9\.]', '', t)
+        if not t:
+            return None
+        val = float(t)
+        return val
+    except Exception:
+        return None
+
+
+def findAmountsInText(text):
+    """
+    Extract monetary amounts from text. Returns list of ["AMOUNT", display_string].
+
+    The function uses a fairly permissive regex to find number tokens with separators
+    and optional currency symbols. It will try to deduplicate visually identical
+    matches and return the list sorted by appearance.
+    """
+    ret = []
+    if not text:
+        return ret
+
+    # match sequences like "€ 1.234,56", "1.234,56 €", "EUR 1234.56", "$1,234.56" or plain numbers with separators
+    amt_re = re.compile(r'(?:EUR|USD|GBP|CHF|JPY|AUD|CAD|€|\$|£)?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})\s*(?:€|EUR|USD|GBP|CHF|JPY|AUD|CAD|\$|£)?', re.I)
+
+    seen = set()
+    for m in amt_re.finditer(text):
+        s = m.group(0).strip()
+        # normalize whitespace
+        s_norm = re.sub(r'\s+', ' ', s)
+        # try to parse numeric value to avoid picking IDs that look numeric
+        val = _parse_amount_value(s_norm)
+        # ignore plain integers that are very large but not amounts (heuristic)
+        if val is None:
+            continue
+        # ignore zero or negative
+        if val <= 0:
+            continue
+
+        # dedupe by numeric value + short string
+        key = (round(val, 2), re.sub(r'[^0-9]', '', s_norm)[-6:])
+        if key in seen:
+            continue
+        seen.add(key)
+        ret.append(["AMOUNT", s_norm])
+
+    return ret
+
+
+def pick_best_amount(amounts, text):
+    """
+    Choose the most probable invoice total from a list of amount candidates.
+    amounts: list of ["AMOUNT", display_string]
+    text: full document text for proximity checks
+
+    Returns display_string or "".
+    """
+    if not amounts:
+        return ""
+
+    try:
+        amt_keywords = ['gesamt', 'gesamtbetrag', 'summe', 'betrag', 'total', 'amount', 'due', 'zu zahlen', 'endbetrag']
+
+        scores = {}
+        for _label, astr in amounts:
+            scores.setdefault(astr, {'freq':0, 'kw':0, 'value':0.0})
+
+        # frequency
+        for astr in list(scores.keys()):
+            try:
+                freq = len(safeFind(astr, text))
+            except Exception:
+                freq = 0
+            scores[astr]['freq'] = freq
+
+        # keyword proximity
+        for astr in list(scores.keys()):
+            kwcount = 0
+            try:
+                occs = safeFind(astr, text)
+            except Exception:
+                occs = []
+            for idx in occs:
+                start = max(0, idx - 80)
+                end = min(len(text), idx + len(astr) + 80)
+                window = text[start:end].lower()
+                for kw in amt_keywords:
+                    if kw in window:
+                        kwcount += 1
+            scores[astr]['kw'] = kwcount
+
+        # numeric value
+        for astr in list(scores.keys()):
+            try:
+                v = _parse_amount_value(astr)
+                scores[astr]['value'] = v if v is not None else 0.0
+            except Exception:
+                scores[astr]['value'] = 0.0
+
+        # scoring
+        best = None
+        bestscore = -1
+        for astr, v in scores.items():
+            score = v['kw'] * 10 + v['freq'] * 2 + (v['value'] / 10000.0)
+            if score > bestscore:
+                bestscore = score
+                best = astr
+
+        return best or ""
+    except Exception:
+        return ""
+
+
+def pick_best_date(dates, text):
+    """
+    Choose the most probable document/invoice date from a list of date candidates.
+    dates: list of ["DATE", "DD.MM.YYYY"]
+    text: full document text for proximity checks
+
+    Returns date string like 'DD.MM.YYYY' or "".
+    """
+    if not dates:
+        return ""
+
+    try:
+        from datetime import datetime
+        now = datetime.now()
+        key_keywords = ['rechnung', 'rechnungsdatum', 'invoice', 'invoice date', 'datum', 'issued', 'ausgestellt', 'date']
+
+        scores = {}
+        for _label, dstr in dates:
+            scores.setdefault(dstr, {'freq':0, 'kw':0, 'recency':0.0})
+
+        # frequency
+        for dstr in list(scores.keys()):
+            try:
+                freq = len(safeFind(dstr, text))
+            except Exception:
+                freq = 0
+            scores[dstr]['freq'] = freq
+
+        # keyword proximity
+        for dstr in list(scores.keys()):
+            kwcount = 0
+            try:
+                occs = safeFind(dstr, text)
+            except Exception:
+                occs = []
+            for idx in occs:
+                start = max(0, idx - 50)
+                end = min(len(text), idx + len(dstr) + 50)
+                window = text[start:end].lower()
+                for kw in key_keywords:
+                    if kw in window:
+                        kwcount += 1
+            scores[dstr]['kw'] = kwcount
+
+        # recency
+        for dstr in list(scores.keys()):
+            try:
+                dt = datetime.strptime(dstr, '%d.%m.%Y')
+                days = abs((now - dt).days)
+                scores[dstr]['recency'] = 1.0 / (1.0 + (days / 365.0))
+            except Exception:
+                scores[dstr]['recency'] = 0.0
+
+        # final score
+        best = None
+        bestscore = -1
+        for dstr, v in scores.items():
+            score = v['kw'] * 10 + v['freq'] * 2 + v['recency']
+            if score > bestscore:
+                bestscore = score
+                best = dstr
+
+        return best or ""
+    except Exception:
+        return ""
+
+
 def suggest_filename(text, date_hint=None, prefer_labels=None, maxlen=60):
     """
     Create a speaking filename base (without date/extension) from document text.

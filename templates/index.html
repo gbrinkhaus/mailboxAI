@@ -147,6 +147,20 @@
                     {% endfor %}
                 </div>
 
+                <!--div class="col-12" id="amount-tags">
+                    <h5>Amounts:</h5>
+                    {% for amt in appobj.amounttags %}
+                    <div class="btn-group btn-group-sm ner-group" role="group">
+                        <button type="button" class="btn btn-ner-cat" 
+                            onclick="javascript:writeFormField('AM', '{{amt[1]|e}}');">{{ amt[0]|e }} </button>
+                        <button type="button" class="btn btn-primary"
+                            onclick="javascript:writeFormField('AM', '{{amt[1]|e}}');">{{ amt[1]|e }} </button>
+                        <button type="button" class="btn fas fa-regular btn-ner-delete"
+                            onclick="javascript:removeTag(this);">x</button>
+                    </div>
+                    {% endfor %}
+                </div-->
+
                 <div class="row align-items-center">
                     <div class="col-2">
                         <br />
@@ -226,6 +240,15 @@
                         </div>
                     </div>
                 </div>
+
+                <!--div class="col-12 levelform">
+                    <div class="input-group">
+                        <div class="input-group-text">Amount</div>
+                        <input id="AM" name="AM" type="text" class="form-control levelinput" placeholder="Amount" value ="{{ appobj.amountonly }}" 
+                            onchange="javascript:checkSendButton();" onkeyup="javascript:checkSendButton();"
+                            {% if not appobj.copyFile %} disabled {% endif %} >
+                    </div>
+                </div-->
 
                 <br />
 
@@ -516,32 +539,34 @@
                 <div class="row">
                     <div class="col-12 levelform">
                         {% for i in range(1,4) %}
-                        {% set disabled = '' if i == 1 else 'disabled' %}
-                        {% set placeholder = 'Folder 1' if i == 1 else '' %}
-                        <div class="input-group mt-2">
-                            <button type="button btn btn-outline-secondary" disabled class="btn btn-ner-cat" id="FModalNr{{i}}" 
-                                onclick="">{{i}}</button>
+                            {% set disabled = '' if i == 1 else 'disabled' %}
+                            {% set placeholder = 'Folder 1' if i == 1 else '' %}
 
-                            <input id="FModalText{{i}}" disabled type="text" class="form-control levelinput" placeholder="{{placeholder}}" value="">
+                            <div class="input-group mt-2">
+                                <button type="button btn btn-outline-secondary" disabled class="btn btn-ner-cat" id="FModalNr{{i}}" 
+                                    onclick="">{{i}}</button>
 
-                            {# <div class="card onecard" id="foldercard{{i}}"> #}
+                                <input id="FModalText{{i}}" disabled type="text" class="form-control levelinput" placeholder="{{placeholder}}" value="">
 
-                            <button type="button" id="FModalDropdwn{{i}}" {{disabled}}
-                                class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
-                                data-bs-toggle="dropdown" aria-expanded="false">
-                                <span class="visually-hidden">Toggle Dropdown</span>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end" id="FModalList{{i}}" >
+                                {# <div class="card onecard" id="foldercard{{i}}"> #}
 
-                                {% for folder in appobj.subfolders[i-1] %}
-                                <li parentfolder="{{folder['parent']}}">
-                                    <a class="dropdown-item"   
-                                        onclick="javascript:selectFolder('{{folder['tag']['text']}}', '{{folder['tag']['label']}}', '{{folder['tag']['texthints']}}', '{{i}}')"> {{folder['subdir']}} </a>
-                                </li>
-                                <!--li><hr class="dropdown-divider"></li-->
-                                {% endfor %}
-                            </ul>
-                        </div>
+                                <button type="button" id="FModalDropdwn{{i}}" {{disabled}}
+                                    class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                    <span class="visually-hidden">Toggle Dropdown</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" id="FModalList{{i}}" >
+
+
+                                    {% for folder in appobj.subfolders[i-1] %}
+                                    <li parentfolder="{{folder['parent']}}">
+                                        <a class="dropdown-item"   
+                                            onclick="javascript:selectFolder('{{folder['tag']['text']}}', '{{folder['tag']['label']}}', '{{folder['tag']['texthints']}}', '{{i}}')"> {{folder['subdir']}} </a>
+                                    </li>
+                                    <!--li><hr class="dropdown-divider"></li-->
+                                    {% endfor %}
+                                </ul>
+                            </div>
                         {% endfor %}
                     </div>
                 </div>
@@ -562,7 +587,7 @@
                     </div>
                 </div>
 
-                {# {{ appobj.subfolders }} #}
+                 {{ appobj.subfolders }} 
 
             </div>
         </div>

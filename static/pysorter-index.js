@@ -67,6 +67,7 @@ $(document).ready(function() {
             const initialFN = fnElem ? fnElem.value.trim() : '';
             const fileContents = (document.getElementById('filecontents')) ? document.getElementById('filecontents').innerText : '';
             const dateVal = (document.getElementById('DT')) ? document.getElementById('DT').value : '';
+            const amountVal = (document.getElementById('AM')) ? document.getElementById('AM').value : '';
 
             // Request suggestion and only overwrite if the value hasn't changed since load
             fetch('/suggest_filename', {
@@ -81,6 +82,15 @@ $(document).ready(function() {
                     const safe = data.suggestion.replace(/[\\/:*?"<>|]/g, '-').trim();
                     if (safe && fnElem && fnElem.value.trim() === initialFN) {
                         fnElem.value = safe;
+                        checkSendButton();
+                    }
+                }
+
+                // if server returns an amount suggestion, prefill AM if unchanged
+                if (data && data.amount && document.getElementById('AM')) {
+                    const amElem = document.getElementById('AM');
+                    if ((amountVal || '').trim() === (amElem.value || '').trim()) {
+                        amElem.value = data.amount;
                         checkSendButton();
                     }
                 }

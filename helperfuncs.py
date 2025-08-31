@@ -245,6 +245,9 @@ def resetApp(app):
 
     # contains the recognized dates
     app.datetags = []
+    # contains the recognized amounts (tuples of ["AMOUNT", display])
+    app.amounttags = []
+    app.amountonly = ""
     app.levels = []
     app.files = []
     app.currenttags = []
