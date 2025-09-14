@@ -4,11 +4,16 @@ from pdf2image import convert_from_path
 import pymupdf as fitz
 import numpy
 import json
+import logging
 from helperfuncs import *
 import os
 import re
 import string
 from types import SimpleNamespace
+try:
+    import cv2
+except Exception:
+    cv2 = None
 
 
 def write_PDFpreview(filename, prevfile, password=None):
@@ -816,7 +821,7 @@ def suggest_filename(text, date_hint=None, prefer_labels=None, maxlen=60):
     if not candidate:
         candidate = "document"
 
-    # remove typical leading words like 'von', 'an', 'an:' etc and dates fragments
+    # remove typical leading words like 'von', 'an', 'für', 'fuer' etc and dates fragments
     candidate = re.sub(r"^(von|an|für|fuer)\s+", '', candidate, flags=re.I)
 
     # if date_hint provided, try to incorporate an identifier (e.g., Invoice ACME -> Invoice_ACME)
@@ -846,22 +851,479 @@ def suggest_filename(text, date_hint=None, prefer_labels=None, maxlen=60):
     return base
 
 
-
-''' Tried to fix image because of constant troubles with jpeg - to no avail - ppm does work
-
-def detect_and_fix(img_path):
-    # detect for premature ending
+def load_zone_templates(config_path=None):
+    """Load zone templates from JSON file. Returns dict with templates and settings.
+    If file is not found, returns defaults embedded in code.
+    """
+    cfg = None
+    if config_path is None:
+        config_path = os.path.join(os.path.dirname(__file__), 'config', 'zones.json')
     try:
-        with open( img_path, 'rb') as im :
-            im.seek(-2,2)
-            if im.read() == b'\xff\xd9':
-                print('Image OK :', img_path) 
-            else: 
-                # fix image
-                img = cv2.imread(img_path)
-                cv2.imwrite( img_path, img)
-                print('FIXED corrupted image :', img_path)           
-    except(IOError, SyntaxError) as e :
-      print(e)
-      print("Unable to load/write Image : {} . Image might be destroyed".format(img_path) )
-'''
+        with open(config_path, 'r', encoding='utf-8') as fh:
+            cfg = json.load(fh)
+    except Exception:
+        logging.exception(f"Could not load zone config at {config_path}, using built-in defaults")
+        cfg = {
+            'zoned_ocr': False,
+            'use_word_confidences': False,
+            'templates': [],
+            'fallback_order': []
+        }
+    return cfg
+
+
+def rel_rect_to_px(rect_rel, width, height):
+    """Convert relative rect [x0,y0,x1,y1] -> pixel box (left, upper, right, lower)"""
+    x0, y0, x1, y1 = rect_rel
+    left = int(round(x0 * width))
+    upper = int(round(y0 * height))
+    right = int(round(x1 * width))
+    lower = int(round(y1 * height))
+    # clamp
+    left = max(0, min(left, width-1))
+    upper = max(0, min(upper, height-1))
+    right = max(0, min(right, width))
+    lower = max(0, min(lower, height))
+    return (left, upper, right, lower)
+
+
+def ocr_zone(pil_image, box, lang='deu'):
+    """Crop PIL image to box and run pytesseract.image_to_string returning text.
+    box = (left, upper, right, lower)
+    """
+    try:
+        crop = pil_image.crop(box)
+        text = pytesseract.image_to_string(crop, lang=lang)
+        return str(text)
+    except Exception:
+        logging.exception('OCR failed for zone')
+        return ""
+
+
+def ner_and_filter(text, nlp, full_text=None, allow_labels=None):
+    """Run spaCy NER on text and filter entities using existing filter_ner_entities.
+    Returns list of SimpleNamespace(label_=..., text=...)
+    """
+    try:
+        doc = nlp(text)
+        ents = filter_ner_entities(doc.ents, text=full_text, allow_labels=allow_labels)
+        return ents
+    except Exception:
+        logging.exception('NER failed for zone')
+        return []
+
+
+def score_and_merge_zone_entities(zone_entity_map, templatesettings=None):
+    """Score entities found in zones and produce merged entity list.
+    zone_entity_map: { zone_id: [SimpleNamespace(label_, text), ...], ... }
+    Returns merged_entities: list of dicts {text,label,best_zone,score,provenance}
+    """
+    merged = {}
+    # basic scoring: occurrences in zone * zone weight
+    for zone_id, zinfo in zone_entity_map.items():
+        weight = zinfo.get('weight', 1.0)
+        ents = zinfo.get('entities', [])
+        for ent in ents:
+            key = (ent.label_.upper(), ent.text.lower())
+            score = weight * 1.0
+            if key not in merged or merged[key]['score'] < score:
+                merged[key] = {
+                    'text': ent.text,
+                    'label': ent.label_,
+                    'best_zone': zone_id,
+                    'score': score,
+                    'provenance': [zone_id]
+                }
+            else:
+                merged[key]['provenance'].append(zone_id)
+    # convert to list
+    out = []
+    for v in merged.values():
+        out.append(v)
+    return out
+
+
+def evaluate_template_quality(zone_entity_map, cfg):
+    """Simple heuristic: sum entities and chars in zones, compare to thresholds."""
+    min_entities = cfg.get('quality_thresholds', {}).get('min_entities', 1)
+    min_chars = cfg.get('quality_thresholds', {}).get('min_chars_in_zones', 20)
+    total_entities = 0
+    total_chars = 0
+    for zid, zinfo in zone_entity_map.items():
+        ents = zinfo.get('entities', [])
+        total_entities += len(ents)
+        text = zinfo.get('text', '')
+        total_chars += len(text)
+    return (total_entities >= min_entities) and (total_chars >= min_chars)
+
+
+def detect_zones_by_density(pilim, min_area_px=2000, blur_ksize=(25,25), merge_close_px=24, debug_images=False):
+    """Simple density-based zone detector.
+
+    Steps:
+      - convert to grayscale
+      - local contrast enhancement (CLAHE)
+      - Gaussian blur to produce density map
+      - Otsu threshold (inverted) to extract ink regions
+      - morphological closing to join nearby text blocks
+      - find contours and return bounding boxes above area threshold
+
+    This is intentionally minimal and deterministic — no pytesseract dependency.
+
+    If debug_images is True, writes intermediate images to /tmp for inspection
+    (no timestamps; files are overwritten on each call).
+    """
+    if cv2 is None:
+        return []
+    import numpy as _np
+    try:
+        img = _np.array(pilim.convert('RGB'))[:, :, ::-1].copy()
+    except Exception:
+        return []
+
+    h, w = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Local contrast enhancement (robust for varied scans)
+    try:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray_enh = clahe.apply(gray)
+    except Exception:
+        gray_enh = gray
+
+    # Gaussian blur to form a density map (use smaller kernel than before)
+    try:
+        kx, ky = blur_ksize
+        kx = max(3, kx if kx % 2 == 1 else kx + 1)
+        ky = max(3, ky if ky % 2 == 1 else ky + 1)
+        blurred = cv2.GaussianBlur(gray_enh, (kx, ky), 0)
+    except Exception:
+        blurred = gray_enh
+
+    # Threshold: invert so text/ink becomes white on black background
+    try:
+        _, th = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    except Exception:
+        # fallback to a simple fixed threshold
+        _, th = cv2.threshold(blurred, 128, 255, cv2.THRESH_BINARY_INV)
+
+    # Morphological closing to join nearby text into blocks
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (merge_close_px, merge_close_px))
+    th_closed = cv2.morphologyEx(th, cv2.MORPH_CLOSE, kernel)
+
+    # Find contours on the closed mask
+    contours_info = cv2.findContours(th_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # compatibility for OpenCV versions returning 2 or 3 values
+    contours = contours_info[-2] if len(contours_info) == 3 else contours_info[0]
+
+    # If debug requested, write intermediate images to /tmp for inspection (no timestamps)
+    if debug_images:
+        try:
+            # grayscale and enhanced
+            cv2.imwrite('/tmp/mbai_density_gray.png', gray)
+            cv2.imwrite('/tmp/mbai_density_gray_enh.png', gray_enh)
+            # blurred / density map
+            cv2.imwrite('/tmp/mbai_density_blurred.png', blurred)
+            # threshold maps
+            cv2.imwrite('/tmp/mbai_density_th.png', th)
+            cv2.imwrite('/tmp/mbai_density_th_closed.png', th_closed)
+            # overlay contours and bounding boxes on color image for visualization
+            overlay = img.copy()
+            try:
+                cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
+            except Exception:
+                pass
+            try:
+                for cnt in contours:
+                    x, y, ww, hh = cv2.boundingRect(cnt)
+                    cv2.rectangle(overlay, (x, y), (x + ww, y + hh), (0, 0, 255), 2)
+            except Exception:
+                pass
+            cv2.imwrite('/tmp/mbai_density_contours.png', overlay)
+        except Exception:
+            logging.exception('Failed to write debug density images to /tmp')
+
+    zones = []
+    for idx, cnt in enumerate(contours):
+        x, y, ww, hh = cv2.boundingRect(cnt)
+        area = ww * hh
+        if area < min_area_px:
+            continue
+        x1, y1, x2, y2 = x, y, x + ww, y + hh
+        zones.append({
+            'id': f'density_{idx}',
+            'rect_px': (int(x1), int(y1), int(x2), int(y2)),
+            'rect': [x1 / w, y1 / h, x2 / w, y2 / h],
+            'weight': 1.0,
+            'score': float(area),
+            'area': int(area),
+        })
+
+    # Merge nearby single-line boxes that likely belong to the same block.
+    # Criteria: similar height, similar left x position, and vertical gap <= 2x line height.
+    zones = merge_single_line_blocks(zones, w, h, height_tol=0.25, x_tol=0.05, max_vertical_gap_multiplier=2.0, max_line_height=48)
+
+    # Sort top-to-bottom, left-to-right for stability and reassign ids
+    zones = sorted(zones, key=lambda z: (z['rect'][1], z['rect'][0]))
+    for i, z in enumerate(zones):
+        z['id'] = f'zone_{i}'
+    return zones
+
+
+def getPDFContents_zoned(filename, workdir, password=None, config_path=None, nlp=None, process_pages=1, lang='deu', debug=False):
+    """Zoned OCR + NER flow. Returns tuple (full_text, zone_results)
+
+    zone_results = {
+       'template_id': ..., 'zones': [{id,name,rect,text,entities: [...] ,weight}],
+       'merged_entities': [ ... ]
+    }
+    """
+    cfg = load_zone_templates(config_path)
+    if not cfg.get('zoned_ocr'):
+        # fallback to existing behavior
+        return getPDFContents(filename, workdir, password)
+
+    # open pdf with same logic as getPDFContents but only render pages we need
+    try:
+        doc = fitz.open(filename)
+    except RuntimeError as e:
+        msg = str(e).lower()
+        if 'password' in msg or 'encrypted' in msg or 'password required' in msg:
+            if not password:
+                raise ValueError('encrypted')
+            try:
+                with open(filename, 'rb') as fh:
+                    data = fh.read()
+                doc = fitz.open(stream=data, filetype='pdf', password=password)
+            except RuntimeError:
+                raise ValueError('bad_password')
+            except Exception:
+                raise
+        else:
+            raise
+
+    # only handle first page by default
+    npages = doc.page_count
+    page_idx = 0
+    try:
+        page = doc.load_page(page_idx)
+    except Exception:
+        doc.close()
+        return "", {}
+
+    # render to pixmap at ~200 dpi
+    mat = fitz.Matrix(200.0 / 72.0, 200.0 / 72.0)
+    pix = page.get_pixmap(matrix=mat)
+    exportfile = os.path.join(workdir, f"Page_no_{page_idx+1}.ppm")
+    pix.save(exportfile)
+
+    pilim = Image.open(exportfile)
+    width, height = pilim.size
+
+    # First, try density-based detection (default). If it returns zones, use them.
+    # debug parameter controls whether intermediate images are written
+    detected = detect_zones_by_density(pilim, debug_images=bool(debug))
+    if detected:
+        chosen_result = {}
+        chosen_template = {'id': 'density', 'name': 'Density detection'}
+        for z in detected:
+            zid = z['id']
+            pxbox = tuple(z['rect_px'])
+            text = ocr_zone(pilim, pxbox, lang=lang)
+            ents = []
+            if nlp and text.strip():
+                ents = ner_and_filter(text, nlp, full_text=None, allow_labels=['PER','ORG','LOC','MISC'])
+            chosen_result[zid] = {
+                'id': zid,
+                'name': z.get('name', zid),
+                'rect': z['rect'],
+                'rect_px': pxbox,
+                'weight': z.get('weight', 1.0),
+                'text': text,
+                'entities': ents
+            }
+    else:
+        # fall back to template-driven zones (existing behavior)
+        templates = {t['id']: t for t in cfg.get('templates', [])}
+        fallback = cfg.get('fallback_order', list(templates.keys()))
+
+        chosen_result = None
+        chosen_template = None
+
+        for tid in fallback:
+            tmpl = templates.get(tid)
+            if not tmpl:
+                continue
+            zone_entity_map = {}
+            # process each enabled zone
+            for zone in tmpl.get('zones', []):
+                if not zone.get('enabled', True):
+                    continue
+                zid = zone['id']
+                rect_rel = zone['rect']
+                pxbox = rel_rect_to_px(rect_rel, width, height)
+                text = ocr_zone(pilim, pxbox, lang=lang)
+                ents = []
+                if nlp and text.strip():
+                    ents = ner_and_filter(text, nlp, full_text=None, allow_labels=['PER','ORG','LOC','MISC'])
+                zone_entity_map[zid] = {
+                    'id': zid,
+                    'name': zone.get('name'),
+                    'rect': rect_rel,
+                    'rect_px': pxbox,
+                    'weight': zone.get('weight', 1.0),
+                    'text': text,
+                    'entities': ents
+                }
+            # evaluate quality
+            if evaluate_template_quality(zone_entity_map, cfg):
+                chosen_result = zone_entity_map
+                chosen_template = tmpl
+                break
+            else:
+                continue
+
+        # if none passed, pick last tried
+        if chosen_result is None:
+            chosen_result = zone_entity_map
+            chosen_template = tmpl
+
+    merged = score_and_merge_zone_entities(chosen_result, chosen_template)
+
+    # build full_text by concatenating zone texts in reading order (template order)
+    full_text_parts = []
+    # If density detection was used, chosen_template may not have a 'zones' list; iterate chosen_result in order
+    if isinstance(chosen_template, dict) and chosen_template.get('id') == 'density':
+        for zid in sorted(chosen_result.keys()):
+            full_text_parts.append(chosen_result[zid].get('text', ''))
+    else:
+        for z in chosen_template.get('zones', []):
+            zid = z['id']
+            if zid in chosen_result:
+                full_text_parts.append(chosen_result[zid].get('text', ''))
+    full_text = "\n\n".join([p for p in full_text_parts if p])
+
+    # close doc
+    try:
+        doc.close()
+    except Exception:
+        pass
+
+    zone_results = {
+        'template_id': chosen_template.get('id'),
+        'template_name': chosen_template.get('name'),
+        'zones': list(chosen_result.values()),
+        'merged_entities': merged
+    }
+
+    return full_text, zone_results
+
+
+def merge_single_line_blocks(zones, page_w, page_h, height_tol=0.25, x_tol=0.05, max_vertical_gap_multiplier=2.0, max_line_height=48):
+    """Merge single-line text boxes into multi-line blocks.
+
+    Heuristic merge rules (simple and deterministic):
+      - Consider boxes whose pixel-height <= max_line_height as single-line candidates
+      - Group vertically adjacent candidates when:
+        * Heights are similar within height_tol (relative)
+        * Left x positions are within x_tol fraction of page width
+        * Vertical gap between consecutive lines <= max_vertical_gap_multiplier * max(line_heights)
+
+    Returns a new list of zones with merged entries. Keeps non-candidate zones unchanged.
+    """
+    if not zones:
+        return zones
+
+    # Prepare indexed candidates with pixel coords
+    items = []
+    for i, z in enumerate(zones):
+        try:
+            x0, y0, x1, y1 = [int(v) for v in z.get('rect_px', (0,0,0,0))]
+        except Exception:
+            # fallback to normalized rect
+            rx0, ry0, rx1, ry1 = z.get('rect', [0,0,0,0])
+            x0 = int(round(rx0 * page_w))
+            y0 = int(round(ry0 * page_h))
+            x1 = int(round(rx1 * page_w))
+            y1 = int(round(ry1 * page_h))
+        h = max(1, y1 - y0)
+        items.append({
+            'idx': i,
+            'orig': z,
+            'x0': x0,
+            'y0': y0,
+            'x1': x1,
+            'y1': y1,
+            'w': max(1, x1 - x0),
+            'h': h,
+        })
+
+    # Split candidates (single-line heuristics) and others
+    candidates = [it for it in items if it['h'] <= max_line_height]
+    others = [it for it in items if it['h'] > max_line_height]
+
+    # Sort candidates top-to-bottom
+    candidates.sort(key=lambda it: (it['y0'], it['x0']))
+
+    used = set()
+    merged_results = []
+
+    for i, it in enumerate(candidates):
+        if it['idx'] in used:
+            continue
+        group = [it]
+        used.add(it['idx'])
+        last = it
+        # try to attach following candidates as long as they meet the criteria
+        for j in range(i+1, len(candidates)):
+            other = candidates[j]
+            if other['idx'] in used:
+                continue
+            # vertical gap (other top - last bottom)
+            gap = other['y0'] - last['y1']
+            if gap < 0:
+                gap = 0
+            allowed_gap = max_vertical_gap_multiplier * max(last['h'], other['h'])
+            if gap <= allowed_gap:
+                # height similarity (relative)
+                max_h = max(last['h'], other['h'])
+                if abs(last['h'] - other['h']) <= height_tol * max_h:
+                    # left x similarity (absolute pixels, tolerance relative to page width)
+                    if abs(last['x0'] - other['x0']) <= max(2, int(round(x_tol * page_w))):
+                        group.append(other)
+                        used.add(other['idx'])
+                        last = other
+                        continue
+            # if it doesn't match, do not skip further ones — but break when gap becomes very large
+            # (since sorted by y, further entries will only be further down). Use a conservative break.
+            if other['y0'] - it['y1'] > max_vertical_gap_multiplier * max(it['h'], other['h']) * 4:
+                break
+
+        if len(group) == 1:
+            # keep original zone
+            merged_results.append(it['orig'])
+        else:
+            # merge group into a single zone
+            x0 = min(g['x0'] for g in group)
+            y0 = min(g['y0'] for g in group)
+            x1 = max(g['x1'] for g in group)
+            y1 = max(g['y1'] for g in group)
+            rect_px = (int(x0), int(y0), int(x1), int(y1))
+            rect = [x0 / float(page_w), y0 / float(page_h), x1 / float(page_w), y1 / float(page_h)]
+            area = int((x1 - x0) * (y1 - y0))
+            # build merged zone based on first original entry but update rects/scores
+            base = group[0]['orig'].copy()
+            base['rect_px'] = rect_px
+            base['rect'] = rect
+            base['area'] = area
+            try:
+                base['score'] = float(area)
+            except Exception:
+                base['score'] = area
+            merged_results.append(base)
+
+    # append non-candidate zones unchanged
+    for o in others:
+        merged_results.append(o['orig'])
+
+    return merged_results
