@@ -48,7 +48,7 @@ function deleteTag(fileid, label, tag, htmlelement) {
 
 
 // Add tag to a file *************************************
-function addTag(fileid, label, tag) {
+function addTagToFile(fileid, label, tag) {
     
     $.ajax({
         url: '/addTagToFile',

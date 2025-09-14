@@ -34,7 +34,7 @@
         {#{ appobj.storedtags }#}
         <div class="btn-group btn-group-sm ner-group" role="group">
             <button type="button" class="btn btn-primary"
-                onclick="javascript:addTag('{{ appobj.currentDoc['db_id']}}', 'ACTION', '{{ent['text']}}');">{{ ent['text'] }} </button>
+                onclick="javascript:addTagToFile('{{ appobj.currentDoc['db_id']}}', 'ACTION', '{{ent['text']}}');">{{ ent['text'] }} </button>
         </div>
     {# {% endif %} #}
 {% endfor %}
@@ -58,7 +58,7 @@
                         {#{ appobj.storedtags }#}
                         <div class="btn-group btn-group-sm ner-group" role="group">
                             <button type="button" class="btn btn-primary"
-                                onclick="javascript:addTag('{{appobj.currentDoc['db_id']}}', '{{ent['label']}}', '{{ent['text']}}');">{{ ent['text'] }} </button>
+                                onclick="javascript:addTagToFile('{{appobj.currentDoc['db_id']}}', '{{ent['label']}}', '{{ent['text']}}');">{{ ent['text'] }} </button>
                         </div>
                     {% endfor %}
                     </p>

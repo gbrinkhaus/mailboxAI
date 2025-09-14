@@ -127,7 +127,7 @@
                         <button type="button" class="btn btn-ner-cat" 
                             onclick="javascript:openNewTagWindow('{{ent['text']|e}}', '{{ent['label']|e}}');">{{ ent['label']|e }} </button>
                         <button type="button" class="btn btn-primary"
-                            onclick="javascript:addTag('{{ent['text']|e}}', '{{ent['label']|e}}');">{{ ent['text']|e }} </button>
+                            onclick="javascript:addTagToFormField('{{ent['text']|e}}', '{{ent['label']|e}}');">{{ ent['text']|e }} </button>
                         <button type="button" class="btn fas fa-regular btn-ner-delete"
                             onclick="javascript:stopTag(this);">&#xf2ed;</button>
                     </div>
@@ -169,7 +169,7 @@
                     <!--div class="col-3">
                         <br />
                         <button type="button" class="btn  btn-outline-primary btn-sm"
-                            onclick="javascript:addTag(window.getSelection().toString(), 'txt');">Write text ></button>
+                            onclick="javascript:addTagToFormField(window.getSelection().toString(), 'txt');">Write text ></button>
                     </div>
                     <div class="col-7 pt-3 text-primary">
                         Alt+1,2,..: Write level, Alt+Shift+1,2,..: Write hint
@@ -451,7 +451,7 @@
                         
                         <!-- Learning: Inputs have a "value" property and a "value" attribute - only 1 of those changes on manual change (!) -->
                         <button type="button" class="btn btn-primary" 
-                            onclick='javascript:addTag($("#target-term").prop("value"), $("#target-type").html(), $("#target-term").attr("value"));writeTag($("#target-term").prop("value"), $("#target-type").html(), $("#target-term").attr("value"));' 
+                            onclick='javascript:addTagToFormField($("#target-term").prop("value"), $("#target-type").html(), $("#target-term").attr("value"));writeTag($("#target-term").prop("value"), $("#target-type").html(), $("#target-term").attr("value"));' 
                             data-bs-dismiss="modal">Add tag</button>
                         
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -579,15 +579,15 @@
                     <div class="col-6 text-end">
                         
                         <!-- Learning: Inputs have a "value" property and a "value" attribute - only 1 of those changes on manual change (!) -->
-                        <button type="button" class="btn btn-primary" 
-                            onclick='javascript:addFolder($("#actionTerm").prop("value"), $("#newAction").prop("value"));' 
-                            data-bs-dismiss="modal">Select</button>
+
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Select</button>
+                        <!-- onclick='javascript:addFolder($("#actionTerm").prop("value"), $("#newAction").prop("value"));' -->
                         
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
 
-                 {{ appobj.subfolders }} 
+                 {#{ appobj.subfolders }#} 
 
             </div>
         </div>

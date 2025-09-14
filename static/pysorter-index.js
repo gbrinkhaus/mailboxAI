@@ -147,7 +147,7 @@ function doc_keyDown(e) {
 
             if (success) {
                 if (window.getSelection().toString())
-                    addTag(window.getSelection().toString(), 'txt');
+                    addTagToFormField(window.getSelection().toString(), 'txt');
 
                 e.preventDefault();
                 e.stopPropagation();
@@ -295,11 +295,11 @@ function selectFolder(text, type, hint, level) {
         $('#FModalDropdwn'+i.toString()).prop("disabled", disable);
     }
     
-    addTag(text, type, hint, level);
+    addTagToFormField(text, type, hint, level);
 }
 
 // To write a tag into a specific tag form field *************************************
-function addTag(text, type, hint, level = "-") {
+function addTagToFormField(text, type, hint, level = "-") {
     // console.log("addTag called with text: " + text + ", type: " + type + ", hint: " + hint + ", level: " + level);
 
     text = text.trim();
