@@ -335,4 +335,140 @@ function showPdfPasswordModal(filename, copyFile, badPassword) {
             modalEl.addEventListener('transitionend', function() { if (modalEl.style.display === 'none') cleanup(); });
         }
     } catch(e) { /* non-fatal */ }
-}
+};
+
+// Zone overlay rendering (only used when server provided zoneResults)
+(function() {
+    'use strict';
+
+    function createSVGOverlay() {
+        const container = document.getElementById('previewContainer');
+        if (!container) return null;
+
+        // Remove existing overlay if any
+        const existing = container.querySelector('svg.zone-overlay');
+        if (existing) existing.remove();
+
+        const img = document.getElementById('previewImage');
+        if (!img) return null;
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'zone-overlay');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.style.position = 'absolute';
+        svg.style.left = '0';
+        svg.style.top = '0';
+        svg.style.width = '100%';
+        svg.style.height = '100%';
+        svg.style.pointerEvents = 'none';
+
+        // Ensure container is positioned relative to host overlay
+        container.style.position = 'relative';
+        container.appendChild(svg);
+        return svg;
+    }
+
+    function renderZones(svg, zones) {
+        if (!svg || !zones) return;
+        const img = document.getElementById('previewImage');
+        const imgRect = img.getBoundingClientRect();
+
+        // SVG viewbox matches image natural size for consistent scaling
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+        // Clear previous children
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+        zones.forEach((z, idx) => {
+            try {
+                // Expect rect as [x0,y0,x1,y1] in relative (0..1) coordinates
+                const rectRel = z.rect || z['rel_rect'] || z['rect_rel'];
+                if (!rectRel || rectRel.length < 4) return;
+                const x0 = rectRel[0] * w;
+                const y0 = rectRel[1] * h;
+                const x1 = rectRel[2] * w;
+                const y1 = rectRel[3] * h;
+                const rw = Math.max(1, x1 - x0);
+                const rh = Math.max(1, y1 - y0);
+
+                // base rect
+                const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                r.setAttribute('x', x0);
+                r.setAttribute('y', y0);
+                r.setAttribute('width', rw);
+                r.setAttribute('height', rh);
+                r.setAttribute('fill', 'rgba(255,165,0,0.15)');
+                r.setAttribute('stroke', 'orange');
+                r.setAttribute('stroke-width', '2');
+                r.style.pointerEvents = 'auto';
+                svg.appendChild(r);
+
+                // label background
+                const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                labelBg.setAttribute('x', x0 + 2);
+                labelBg.setAttribute('y', Math.max(0, y0 - 22));
+                labelBg.setAttribute('width', Math.min(200, rw));
+                labelBg.setAttribute('height', 20);
+                labelBg.setAttribute('fill', 'rgba(0,0,0,0.6)');
+                svg.appendChild(labelBg);
+
+                // label text
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', x0 + 6);
+                text.setAttribute('y', Math.max(12, y0 - 6));
+                text.setAttribute('fill', '#fff');
+                text.setAttribute('font-size', '12');
+                text.setAttribute('font-family', 'Arial, Helvetica, sans-serif');
+                text.textContent = z.name ? `${z.id || idx}: ${z.name}` : `zone ${idx}`;
+                svg.appendChild(text);
+
+            } catch (e) {
+                console.error('Error rendering zone', e);
+            }
+        });
+    }
+
+    function showZones() {
+        if (!window.zoneResults || !window.zoneResults.zones) return;
+        const svg = createSVGOverlay();
+        if (!svg) return;
+        renderZones(svg, window.zoneResults.zones);
+    }
+
+    function hideZones() {
+        const container = document.getElementById('previewContainer');
+        if (!container) return;
+        const existing = container.querySelector('svg.zone-overlay');
+        if (existing) existing.remove();
+    }
+
+    function toggleZones() {
+        const btn = document.getElementById('toggleZonesBtn');
+        if (!btn) return;
+        const container = document.getElementById('previewContainer');
+        const existing = container && container.querySelector('svg.zone-overlay');
+        if (existing) {
+            hideZones();
+            btn.textContent = 'Show zones';
+        } else {
+            showZones();
+            btn.textContent = 'Hide zones';
+        }
+    }
+
+    // wire button if present and zoneResults available
+    document.addEventListener('DOMContentLoaded', function() {
+        const btn = document.getElementById('toggleZonesBtn');
+        if (!btn) return;
+        // only enable when server provided zone results
+        if (!window.zoneResults || !window.zoneResults.zones || window.zoneResults.zones.length === 0) {
+            btn.disabled = true;
+            btn.title = 'No zone data available';
+            return;
+        }
+        btn.addEventListener('click', toggleZones);
+    });
+
+})();

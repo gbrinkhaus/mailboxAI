@@ -1,0 +1,44 @@
+{
+  "zoned_ocr": true,
+  "use_word_confidences": false,
+  "templates": [
+    {
+      "id": "invoice",
+      "name": "Invoice (default)",
+      "zones": [
+        { "id": "header", "name": "Header", "rect": [0.02, 0.00, 0.98, 0.12], "weight": 1.5, "enabled": true },
+        { "id": "top_left", "name": "Top Left", "rect": [0.02, 0.12, 0.50, 0.30], "weight": 1.2, "enabled": true },
+        { "id": "top_right", "name": "Top Right", "rect": [0.50, 0.12, 0.98, 0.30], "weight": 1.2, "enabled": true },
+        { "id": "body", "name": "Body", "rect": [0.02, 0.30, 0.98, 0.85], "weight": 1.0, "enabled": true },
+        { "id": "right_column", "name": "Right Column", "rect": [0.70, 0.30, 0.98, 0.85], "weight": 1.1, "enabled": true },
+        { "id": "footer", "name": "Footer", "rect": [0.02, 0.85, 0.98, 1.00], "weight": 1.6, "enabled": true }
+      ]
+    },
+    {
+      "id": "letter",
+      "name": "Letter",
+      "zones": [
+        { "id": "header", "name": "Header", "rect": [0.05, 0.00, 0.95, 0.14], "weight": 1.2, "enabled": true },
+        { "id": "sender_block", "name": "Sender Block", "rect": [0.05, 0.14, 0.40, 0.30], "weight": 1.1, "enabled": true },
+        { "id": "recipient_block", "name": "Recipient Block", "rect": [0.45, 0.14, 0.95, 0.30], "weight": 1.1, "enabled": true },
+        { "id": "body", "name": "Body", "rect": [0.05, 0.30, 0.95, 0.85], "weight": 1.0, "enabled": true },
+        { "id": "footer", "name": "Footer", "rect": [0.05, 0.85, 0.95, 1.00], "weight": 1.3, "enabled": true }
+      ]
+    },
+    {
+      "id": "generic",
+      "name": "Generic",
+      "zones": [
+        { "id": "header", "name": "Header", "rect": [0.04, 0.00, 0.96, 0.12], "weight": 1.1, "enabled": true },
+        { "id": "left", "name": "Left Column", "rect": [0.04, 0.12, 0.50, 0.80], "weight": 1.0, "enabled": true },
+        { "id": "right", "name": "Right Column", "rect": [0.50, 0.12, 0.96, 0.80], "weight": 1.0, "enabled": true },
+        { "id": "footer", "name": "Footer", "rect": [0.04, 0.80, 0.96, 1.00], "weight": 1.2, "enabled": true }
+      ]
+    }
+  ],
+  "fallback_order": ["invoice", "letter", "generic"],
+  "quality_thresholds": {
+    "min_entities": 1,
+    "min_chars_in_zones": 20
+  }
+}

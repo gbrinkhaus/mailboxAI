@@ -236,7 +236,9 @@ def resetApp(app):
     # contains all stored tags from database
     app.storedtags = app.dbhandler.get_db_tags()
     app.filestotags = app.dbhandler.get_db_content('files_to_tags')
-
+    # Ensure zone results and preview file are always defined to avoid Jinja Undefined being passed to tojson
+    app.zone_results = {}
+    app.prevfile = ''
     
     localfilelist = getLocalFiles(app.localcfg['targetpath'], "", True)
     app.docfilelist = sorted(localfilelist, key=lambda x: x['path'])
@@ -262,6 +264,23 @@ def resetApp(app):
     app.prevfile = "./static/images/preview.jpg"
     if os.path.isfile(app.prevfile): os.remove(app.prevfile)
     shutil.copy(app.prevfile + ".bak", app.prevfile)
+
+    # Load zone configuration once at reset and attach to app object so
+    # it is not reloaded per-request. app.zone_config will be None if
+    # the config file is missing or invalid.
+    try:
+        cfgpath = os.path.join(os.path.dirname(__file__), 'config', 'zones.json')
+        app.zone_config = None
+        app.zone_config_path = None
+        if os.path.exists(cfgpath):
+            with open(cfgpath, 'r', encoding='utf-8') as fh:
+                app.zone_config = json.load(fh)
+                app.zone_config_path = cfgpath
+    except Exception:
+        # keep None on failure and allow AICore to fallback
+        app.zone_config = None
+        app.zone_config_path = None
+
     return
 
 

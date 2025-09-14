@@ -55,6 +55,7 @@ resetApp(app)
 
 # load SPACY NLP - remember that lang must also be set in PDFOCR function 
 nlp = spacy.load("de_core_news_md") # german
+
 # print(list(spacy.info()['pipelines'].keys()))
 # nlp = spacy.load("en_core_web_md") # english
 
@@ -131,7 +132,26 @@ def index():
 
             # try to get the PDF contents
             try:
-                app.filecontents = AICore.getPDFContents(filename, app.workdir, pw)
+                # if zoned OCR is enabled, use zoned variant which returns (text, zone_results)
+                # Use zone config loaded during resetApp (app.zone_config).
+                cfg = getattr(app, 'zone_config', None)
+                cfgpath = getattr(app, 'zone_config_path', None)
+                if cfg and cfg.get('zoned_ocr'):
+                    try:
+                        # Pass app.debug so zoned OCR can write debug images only when debugging is enabled
+                        text_and_zones = AICore.getPDFContents_zoned(filename, app.workdir, pw, config_path=cfgpath, nlp=nlp, debug=app.debug)
+                        if isinstance(text_and_zones, tuple) and len(text_and_zones) == 2:
+                            app.filecontents, app.zone_results = text_and_zones
+                        else:
+                            app.filecontents = text_and_zones
+                            app.zone_results = {}
+                    except Exception:
+                        # On any failure of zoned OCR, fallback to non-zoned OCR to keep UX smooth
+                        app.filecontents = AICore.getPDFContents(filename, app.workdir, pw)
+                        app.zone_results = {}
+                else:
+                    app.filecontents = AICore.getPDFContents(filename, app.workdir, pw)
+                    app.zone_results = {}
             except ValueError as ve:
                 # Signal to the client that a password is required or invalid
                 msg = str(ve)
@@ -141,7 +161,7 @@ def index():
                     return json.dumps({'success':False, 'password_required':True, 'bad_password':True}), 200, {'ContentType':'application/json'}
                 else:
                     raise
-            
+
             # extract the pdf contents (may require PDF password)
             AICore.write_PDFpreview(filename, app.prevfile, pw)
                           
@@ -184,7 +204,7 @@ def index():
                             ents.append({"id": tag["id"], "label": tag["label"], "text": tag["text"], "texthints": tag["texthints"], 'occurence': len(matches)})
 
             # AICore candidate: do NER on recognized text and double check the results *******************
-            nlp = de_core_news_md.load()
+            # nlp = de_core_news_md.load()
             doc = nlp(app.filecontents)
             # Filter noisy NER results before validating
             filtered = AICore.filter_ner_entities(doc.ents, text=app.filecontents, allow_labels=['PER','ORG','LOC','MISC'])
